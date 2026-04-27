@@ -4,9 +4,9 @@ description: "Developer home page for Summerrs Admin, focused on capability map,
 link-rss: updates
 
 hero:
-  name: "Summerrs Admin"
-  text: "Rust admin backend and developer platform"
-  tagline: "v0.1 development version. A multi-crate workspace built on the Summer ecosystem, already integrating system admin APIs, OpenAPI, embedded MCP Server, AI Relay, multi-tenant support, and SQL rewrite extensions."
+  name: Summerrs Admin
+  text: Rust Backend Management Platform
+  tagline: Integrated AI Gateway, Multi-tenancy, and MCP Server for Production
   actions:
     - theme: brand
       text: "Quick Start"
