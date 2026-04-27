@@ -61,7 +61,6 @@ const plugins = [
     emitMetadata: '0',
     inputPosition: 'top',
   }),
-  pluginLlms(),
   pluginChangelog({
     fetchOnDev: false,
     items: [
@@ -110,7 +109,7 @@ export default defineConfig({
     versions: ['v0.1'],
   },
   ssg: true,
-  // llms: true, // Removed: conflicts with pluginLlms()
+  llms: true,
   title: 'Summer Admin Docs',
   description:
     'Summerrs Admin 的开发者文档站，覆盖快速开始、OpenAPI、MCP 与工作区模块说明。',
