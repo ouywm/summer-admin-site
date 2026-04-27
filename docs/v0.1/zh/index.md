@@ -1,19 +1,16 @@
 ---
 pageType: home
-description: 面向本地开发者的 Summerrs Admin 文档站首页，重点提供快速开始、验证路径与模块导航。
+description: Summerrs Admin - 基于 Rust 的后台管理平台，集成 AI 网关、多租户、MCP 服务器
 link-rss: updates
 
 hero:
   name: Summerrs Admin
-  text: Rust 后台管理与开发支撑平台
-  tagline: v0.1 开发版本。基于 Summer 生态构建的多 crate 工作区，当前已集成系统后台接口、OpenAPI、嵌入式 MCP Server，以及 AI Relay、多租户与 SQL 重写扩展能力。
+  text: Rust 后台管理平台
+  tagline: 集成 AI 网关、多租户、MCP 服务器的生产级后台系统
   actions:
     - theme: brand
       text: 快速开始
       link: /guide/start/getting-started
-    - theme: alt
-      text: 项目介绍
-      link: /guide/start/introduction
     - theme: alt
       text: GitHub
       link: https://github.com/ouywm/summerrs-admin
@@ -21,22 +18,28 @@ hero:
     src: /logo-dark.png
     alt: Summerrs Admin
 features:
-  - title: 先跑通后台服务
-    details: 文档优先覆盖本地开发者最关心的路径：准备依赖、初始化 SQL、启动服务、验证 OpenAPI 与 MCP 入口。
+  - icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>'
+    title: 快速开始
+    details: 5 分钟完成环境搭建，启动服务并验证核心功能
     link: /guide/start/getting-started
-  - title: 系统后台基础能力
-    details: 工作区已包含认证、用户、角色、菜单、字典、配置、文件、日志、通知与监控等系统域接口。
+  - icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>'
+    title: 认证授权
+    details: JWT + RBAC，支持多种算法和声明式权限控制
     link: /guide/start/introduction
-  - title: 嵌入式 MCP Server
-    details: summer-mcp 可随主应用一起暴露在 /api/mcp，也支持 standalone 方式独立运行，提供表工具与代码生成能力。
+  - icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
+    title: AI 网关
+    details: 统一代理 21+ AI 提供商，支持流式、计费、故障转移
+    link: /guide/start/module-overview
+  - icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>'
+    title: MCP 服务器
+    details: AI 助手可发现数据库结构、生成代码、部署菜单
     link: /guide/start/verify-after-start
-  - title: AI Relay 与管理能力
-    details: 工作区同时包含 OpenAI 兼容入口、AI 后台管理接口、路由与计费相关模块，适合继续扩展 AI 控制面。
+  - icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>'
+    title: 多租户
+    details: 四种隔离级别，SQL 重写，透明分片
     link: /guide/start/module-overview
-  - title: 多租户与 SQL 重写
-    details: summer-sharding、summer-sql-rewrite 与 tenant schema 为租户隔离、行级注入与后续分片能力提供基础设施。
-    link: /guide/start/module-overview
-  - title: 面向二次开发的工作区
-    details: 从 crates、config 到 sql 目录，文档会先帮助你建立工作区心智模型，再继续深入具体模块。
+  - icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>'
+    title: 插件化
+    details: 模块化架构，易于扩展和二次开发
     link: /guide/start/module-overview
 ---
