@@ -334,6 +334,6 @@ brew services start redis
 
 ## 下一步
 
-- 阅读[项目配置](./configuration.md)了解详细配置选项
+- 阅读[启动后验证](./verify-after-start.md)了解如何验证服务
 - 查看 Swagger UI 探索可用的 API 端点
-- 参考[项目概述](./overview.md)了解架构设计
+- 参考[模块概览](./module-overview.md)了解项目结构
