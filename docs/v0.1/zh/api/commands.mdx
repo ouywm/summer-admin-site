@@ -1,0 +1,53 @@
+---
+title: 文档站命令
+description: 记录 summer-admin-docs 文档站仓库自身的常用开发、格式化与构建命令。
+published_at: 2026-04-26 10:15:00
+---
+
+# 文档站命令
+
+这一页记录的是当前文档站仓库 `summer-admin-docs` 自己的常用命令，不是 `summerrs-admin` 主仓库的运行命令。
+
+## `pnpm dev`
+
+启动 Rspress 本地开发服务：
+
+```bash
+pnpm dev
+```
+
+适合边写边看文档页面效果。
+
+## `pnpm build`
+
+构建静态站点：
+
+```bash
+pnpm build
+```
+
+默认输出到 `doc_build/`。
+
+## `pnpm preview`
+
+本地预览生产构建结果：
+
+```bash
+pnpm preview
+```
+
+## `pnpm lint`
+
+检查当前文档站仓库内的内容与配置格式：
+
+```bash
+pnpm lint
+```
+
+## `pnpm format`
+
+按当前仓库的 Biome 配置自动格式化：
+
+```bash
+pnpm format
+```

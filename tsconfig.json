@@ -15,13 +15,16 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
+    "paths": {
+      "i18n": ["./i18n.json"]
+    },
 
     /* type checking */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["docs", "theme", "rspress.config.ts"],
+  "include": ["docs", "theme", "rspress.config.ts", "i18n.json"],
   "mdx": {
     "checkMdx": true
   }

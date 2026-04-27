@@ -1,0 +1,18 @@
+{
+  "guide": {
+    "zh": "指南",
+    "en": "Guide"
+  },
+  "api": {
+    "zh": "API",
+    "en": "API"
+  },
+  "github": {
+    "zh": "GitHub",
+    "en": "GitHub"
+  },
+  "gettingStarted": {
+    "zh": "开始使用",
+    "en": "Getting Started"
+  }
+}

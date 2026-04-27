@@ -1,0 +1,53 @@
+---
+title: Docs Site Commands
+description: Common development, formatting, and build commands for the summer-admin-docs site itself.
+published_at: 2026-04-26 10:15:00
+---
+
+# Docs Site Commands
+
+This page records commands for the `summer-admin-docs` documentation repository itself, not the runtime commands of the `summerrs-admin` main workspace.
+
+## `pnpm dev`
+
+Start the local Rspress development server:
+
+```bash
+pnpm dev
+```
+
+Useful when writing and previewing docs at the same time.
+
+## `pnpm build`
+
+Build the static site:
+
+```bash
+pnpm build
+```
+
+The default output directory is `doc_build/`.
+
+## `pnpm preview`
+
+Preview the production build locally:
+
+```bash
+pnpm preview
+```
+
+## `pnpm lint`
+
+Check the current docs repository content and config:
+
+```bash
+pnpm lint
+```
+
+## `pnpm format`
+
+Format the repository using the current Biome configuration:
+
+```bash
+pnpm format
+```

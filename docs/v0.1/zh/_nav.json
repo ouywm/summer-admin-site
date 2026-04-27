@@ -1,0 +1,16 @@
+[
+  {
+    "text": "guide",
+    "link": "/guide/start/introduction",
+    "activeMatch": "/guide/"
+  },
+  {
+    "text": "api",
+    "link": "/api/",
+    "activeMatch": "/api/"
+  },
+  {
+    "text": "github",
+    "link": "https://github.com/ouywm/summerrs-admin"
+  }
+]

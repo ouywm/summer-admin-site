@@ -1,16 +1,16 @@
 [
   {
-    "text": "Guide",
+    "text": "guide",
     "link": "/guide/start/introduction",
     "activeMatch": "/guide/"
   },
   {
-    "text": "API",
+    "text": "api",
     "link": "/api/",
     "activeMatch": "/api/"
   },
   {
-    "text": "Document",
-    "link": "https://rspress.rs/"
+    "text": "github",
+    "link": "https://github.com/ouywm/summerrs-admin"
   }
 ]
