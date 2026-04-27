@@ -10,10 +10,7 @@ hero:
   actions:
     - theme: brand
       text: "Quick Start"
-      link: /en/guide/start/getting-started
-    - theme: alt
-      text: "Introduction"
-      link: /en/guide/start/introduction
+      link: /en/guide/start/overview
     - theme: alt
       text: "GitHub"
       link: https://github.com/ouywm/summerrs-admin
@@ -21,22 +18,28 @@ hero:
     src: /logo-dark.png
     alt: "Summerrs Admin"
 features:
-  - title: "Start the backend first"
-    details: "The docs focus on the shortest local path that developers care about most: prepare dependencies, initialize SQL, boot the app, and verify OpenAPI and MCP endpoints."
-    link: /en/guide/start/getting-started
-  - title: "System admin foundations"
-    details: "The workspace already includes auth, users, roles, menus, dictionaries, configuration, files, logs, notifications, and monitoring APIs."
-    link: /en/guide/start/introduction
-  - title: "Embedded MCP Server"
-    details: "summer-mcp can be exposed together with the main app at /api/mcp, or run in standalone mode for table tools and code generation workflows."
-    link: /en/guide/start/verify-after-start
-  - title: "AI Relay and admin modules"
-    details: "The workspace also includes an OpenAI-compatible gateway, AI admin APIs, routing, and billing-related modules for extending an AI control plane."
-    link: /en/guide/start/module-overview
-  - title: "Multi-tenant and SQL rewrite"
-    details: "summer-sharding, summer-sql-rewrite, and tenant schemas provide the foundation for tenant isolation, row-level injection, and future sharding strategies."
-    link: /en/guide/start/module-overview
-  - title: "A workspace for secondary development"
-    details: "From crates and config to SQL directories, the docs first help you build a mental model of the workspace before going deeper into individual modules."
-    link: /en/guide/start/module-overview
+  - icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>'
+    title: Quick Start
+    details: Set up environment and start service in 5 minutes
+    link: /en/guide/start/overview
+  - icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>'
+    title: Authentication
+    details: JWT + RBAC with multiple algorithms and declarative permissions
+    link: /en/guide/start/overview
+  - icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
+    title: AI Gateway
+    details: Unified proxy for 21+ AI providers with streaming and billing
+    link: /en/guide/start/overview
+  - icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>'
+    title: MCP Server
+    details: AI assistants can discover schemas, generate code, deploy menus
+    link: /en/guide/start/overview
+  - icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>'
+    title: Multi-tenancy
+    details: Four isolation levels, SQL rewriting, transparent sharding
+    link: /en/guide/start/overview
+  - icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>'
+    title: Plugin System
+    details: Modular architecture, easy to extend and customize
+    link: /en/guide/start/overview
 ---
