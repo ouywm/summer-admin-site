@@ -4,7 +4,7 @@ description: Summerrs Admin 项目概述
 
 # 概述
 
-Summerrs Admin 是一个基于 Rust 和 Summer 生态构建的多 crate 工作区。它不是单一的”后台模板”，而是把后台系统接口、MCP Server、AI Relay、多租户与 SQL 重写能力放在同一个仓库里，方便在同一套基础设施上持续演进。
+Summerrs Admin 是一个基于 Rust 和 Summer 生态构建的多 crate 工作区。它不是单一的"后台模板"，而是把后台系统接口、MCP Server、AI Relay、多租户与 SQL 重写能力放在同一个仓库里，方便在同一套基础设施上持续演进。
 
 当前仓库里已经能直接看到几类核心能力：
 
