@@ -27,9 +27,6 @@ importers:
       '@biomejs/biome':
         specifier: 2.3.14
         version: 2.3.14
-      '@rspress/plugin-llms':
-        specifier: ^2.0.9
-        version: 2.0.9(@rspress/core@2.0.9(@emnapi/core@1.9.0)(@emnapi/runtime@1.9.0)(@types/mdast@4.0.4)(@types/react@19.2.14)(micromark-util-types@2.0.2)(micromark@4.0.2))
       '@rspress/plugin-rss':
         specifier: ^2.0.9
         version: 2.0.9(@rspress/core@2.0.9(@emnapi/core@1.9.0)(@emnapi/runtime@1.9.0)(@types/mdast@4.0.4)(@types/react@19.2.14)(micromark-util-types@2.0.2)(micromark@4.0.2))
@@ -253,12 +250,6 @@ packages:
     resolution: {integrity: sha512-cfbqqbWtdimrWIsfeyPnQOTKwJpdNLr8VnwLIL4JYC2ZcRq+xcInpszLXVpV86nONL6qI19usr2Or7uzZJ+ynA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
-
-  '@rspress/plugin-llms@2.0.9':
-    resolution: {integrity: sha512-jXSo7o89w0XH2OTdR//iP5pL5E7xR/fBpdpuA4H2aJsFP/Lk/4xMKnpm4BrrrDlsPFNFotv8kZy5YmgHH715Cw==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    peerDependencies:
-      '@rspress/core': ^2.0.9
 
   '@rspress/plugin-rss@2.0.9':
     resolution: {integrity: sha512-3X1OYbM9tasN4sX1TYLMi9O3S1iZW72rAGW+78uzAF27crSWA33debqPS8qntFAcp/DSOWetmTnyGgBpez+cOA==}
@@ -1750,17 +1741,6 @@ snapshots:
       - micromark-util-types
       - supports-color
       - webpack-hot-middleware
-
-  '@rspress/plugin-llms@2.0.9(@rspress/core@2.0.9(@emnapi/core@1.9.0)(@emnapi/runtime@1.9.0)(@types/mdast@4.0.4)(@types/react@19.2.14)(micromark-util-types@2.0.2)(micromark@4.0.2))':
-    dependencies:
-      '@rspress/core': 2.0.9(@emnapi/core@1.9.0)(@emnapi/runtime@1.9.0)(@types/mdast@4.0.4)(@types/react@19.2.14)(micromark-util-types@2.0.2)(micromark@4.0.2)
-      remark-mdx: 3.1.1
-      remark-parse: 11.0.0
-      remark-stringify: 11.0.0
-      unified: 11.0.5
-      unist-util-visit: 5.1.0
-    transitivePeerDependencies:
-      - supports-color
 
   '@rspress/plugin-rss@2.0.9(@rspress/core@2.0.9(@emnapi/core@1.9.0)(@emnapi/runtime@1.9.0)(@types/mdast@4.0.4)(@types/react@19.2.14)(micromark-util-types@2.0.2)(micromark@4.0.2))':
     dependencies:

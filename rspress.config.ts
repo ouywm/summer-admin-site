@@ -2,7 +2,6 @@ import * as path from 'node:path';
 import { defineConfig } from '@rspress/core';
 import { pluginRss } from '@rspress/plugin-rss';
 import { pluginSitemap } from '@rspress/plugin-sitemap';
-import { pluginLlms } from '@rspress/plugin-llms';
 import pluginGoogleAnalytics from 'rspress-plugin-google-analytics';
 import pluginClarity from 'rspress-plugin-clarity';
 import { pluginChangelog } from 'rspress-plugin-changelog';
@@ -111,7 +110,7 @@ export default defineConfig({
     versions: ['v0.1'],
   },
   ssg: true,
-  llms: true,
+  // llms: true, // Removed: conflicts with pluginLlms()
   title: 'Summer Admin Docs',
   description:
     'Summerrs Admin 的开发者文档站，覆盖快速开始、OpenAPI、MCP 与工作区模块说明。',
