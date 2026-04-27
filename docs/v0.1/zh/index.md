@@ -10,7 +10,7 @@ hero:
   actions:
     - theme: brand
       text: 快速开始
-      link: /guide/start/getting-started
+      link: /guide/start/overview
     - theme: alt
       text: GitHub
       link: https://github.com/ouywm/summerrs-admin
