@@ -44,5 +44,4 @@ published_at: 2026-04-26 09:00:00
 ## 建议的阅读顺序
 
 1. 先看 [快速开始](/guide/start/getting-started)，把服务跑起来
-2. 再看 [启动后验证](/guide/start/verify-after-start)，确认 OpenAPI、登录接口和 MCP 路径都通了
-3. 最后看 [模块概览](/guide/start/module-overview)，建立对整个工作区的整体认知
+2. 再看 [模块概览](/guide/start/module-overview)，建立对整个工作区的整体认知
