@@ -3,5 +3,15 @@
     "type": "dir-section-header",
     "name": "start",
     "label": "gettingStarted"
+  },
+  {
+    "type": "dir-section-header",
+    "name": "architecture",
+    "label": "architecture"
+  },
+  {
+    "type": "dir-section-header",
+    "name": "core",
+    "label": "core"
   }
 ]

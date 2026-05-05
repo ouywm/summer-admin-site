@@ -7,12 +7,32 @@
     "zh": "API",
     "en": "API"
   },
+  "blog": {
+    "zh": "博客",
+    "en": "Blog"
+  },
+  "preview": {
+    "zh": "预览",
+    "en": "Preview"
+  },
   "github": {
     "zh": "GitHub",
     "en": "GitHub"
   },
   "gettingStarted": {
-    "zh": "开始使用",
+    "zh": "快速开始",
     "en": "Getting Started"
+  },
+  "architecture": {
+    "zh": "架构",
+    "en": "Architecture"
+  },
+  "core": {
+    "zh": "核心能力",
+    "en": "Core Features"
+  },
+  "configuration": {
+    "zh": "配置参考",
+    "en": "Configuration"
   }
 }

@@ -2,11 +2,11 @@ import * as path from 'node:path';
 import { defineConfig } from '@rspress/core';
 import { pluginRss } from '@rspress/plugin-rss';
 import { pluginSitemap } from '@rspress/plugin-sitemap';
-import pluginGoogleAnalytics from 'rspress-plugin-google-analytics';
-import pluginClarity from 'rspress-plugin-clarity';
 import { pluginChangelog } from 'rspress-plugin-changelog';
+import pluginClarity from 'rspress-plugin-clarity';
 import rspressPluginFileTree from 'rspress-plugin-file-tree';
 import { pluginGiscus } from 'rspress-plugin-giscus';
+import pluginGoogleAnalytics from 'rspress-plugin-google-analytics';
 import rspressPluginMermaid from 'rspress-plugin-mermaid';
 import rspressPluginReadingTime from 'rspress-plugin-reading-time';
 
@@ -110,6 +110,10 @@ export default defineConfig({
   },
   ssg: true,
   llms: true,
+  route: {
+    // 排除 docs/components/ —— 这些是给 mdx 引用的 React 组件,不是文档页
+    exclude: ['components/**/*'],
+  },
   title: 'Summer Admin Docs',
   description:
     'Summerrs Admin 的开发者文档站，覆盖快速开始、OpenAPI、MCP 与工作区模块说明。',

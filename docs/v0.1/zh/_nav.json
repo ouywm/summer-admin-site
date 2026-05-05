@@ -10,6 +10,15 @@
     "activeMatch": "/api/"
   },
   {
+    "text": "blog",
+    "link": "/blog/",
+    "activeMatch": "/blog/"
+  },
+  {
+    "text": "preview",
+    "link": "https://admin.summerrs.com/"
+  },
+  {
     "text": "github",
     "link": "https://github.com/ouywm/summerrs-admin"
   }
