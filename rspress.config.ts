@@ -5,7 +5,6 @@ import { pluginSitemap } from '@rspress/plugin-sitemap';
 import { pluginChangelog } from 'rspress-plugin-changelog';
 import pluginClarity from 'rspress-plugin-clarity';
 import rspressPluginFileTree from 'rspress-plugin-file-tree';
-import { pluginGiscus } from 'rspress-plugin-giscus';
 import pluginGoogleAnalytics from 'rspress-plugin-google-analytics';
 import rspressPluginMermaid from 'rspress-plugin-mermaid';
 import rspressPluginReadingTime from 'rspress-plugin-reading-time';
@@ -49,17 +48,6 @@ const plugins = [
   }),
   rspressPluginFileTree({
     initialExpandDepth: 2,
-  }),
-  pluginGiscus({
-    repo: 'ouywm/summer-admin-site',
-    repoId: 'R_kgDORqqu0g',
-    category: 'Q&A',
-    categoryId: 'DIC_kwDORqqu0s4C7xga',
-    mapping: 'pathname',
-    lang: 'zh-CN',
-    reactionsEnabled: '1',
-    emitMetadata: '0',
-    inputPosition: 'top',
   }),
   pluginChangelog({
     fetchOnDev: false,
@@ -123,6 +111,7 @@ export default defineConfig({
     dark: '/logo-dark.png',
   },
   plugins,
+  globalUIComponents: [path.join(__dirname, 'theme', 'components', 'ConditionalGiscus.tsx')],
   themeConfig: {
     llmsUI: true,
     socialLinks: [
