@@ -61,9 +61,14 @@ At 10 QPS who cares. At scale, Redis is a hotspot. And fundamentally this is jus
 
 > **Pain point**: Mandatory Redis on every request. Doesn't scale.
 
-## 2. v2: I read open-source admin code. I was confused.
+## 2. v2: I read open-source admin code. I couldn't follow their trade-offs.
 
 Time to see how others do it. I opened a few thousand-star admin projects and decoded the tokens they hand out. **The results surprised me.**
+
+> **A disclaimer up front:** the projects below are thousand-star, production-running, mature systems.
+> "I can't follow their trade-offs" ≠ "they got it wrong" — they almost certainly carry constraints I can't see (legacy weight, team habits, compatibility with some frontend SDK, compliance / audit requirements).
+>
+> I'm only saying that **as a brand-new project starting from zero**, I can't copy these designs — not for moral reasons, but because once I copy them I can't explain *why* each field exists.
 
 ### 2.1 Classic flavor: JWT wrapping a UUID
 
@@ -83,15 +88,15 @@ Decoded payload:
 
 **One field. One UUID.** That UUID is the Redis key for fetching user info.
 
-I didn't get it. How is this different from my v1? **The only difference is wrapping the UUID in JWT**:
+I can't see the upside. How is this different from my v1, fundamentally? **The only difference is wrapping the UUID in JWT**:
 
 - No user info in the token (still hits Redis)
 - No expiry field (no `exp` in payload)
 - No refresh token
 
-So why bother? **Zero benefit.** HMAC signature prevents UUID tampering — but a UUID is already an unguessable random string; a tampered one just won't match anything.
+So why bother? **You pay signing/verification cost without getting any of the benefits JWT was designed to give**. HMAC prevents UUID tampering — but a UUID is already an unguessable random string; a tampered one just won't match anything.
 
-The only "benefit" is looking modern.
+The only visible "benefit" is matching the expectation that "modern projects use JWT." **That's aesthetics, not engineering.**
 
 ### 2.2 Frankenstein flavor: JWT with sessionId + tokenVersion
 
@@ -117,15 +122,19 @@ Now you maintain **two worlds**:
 - sessionId → Redis lookup (no savings)
 - tokenVersion in some table
 
-Sometimes business complexity demands this. But for a small admin panel, **complexity doesn't match the payoff**.
+If your business genuinely demands this kind of "dual state" (think finance, or compliance rules requiring forced logout), the combo is actually **a reasonable compromise** — keep JWT's portability, but retain a central control point via sessionId/tokenVersion. For a generic admin panel though, **complexity doesn't match the payoff** — and if I copy it, I won't be able to articulate the contract of each field.
 
 ### 2.3 Raw UUID flavor
 
 Some don't bother with JWT at all. Login returns UUID, straight to Redis.
 
-Identical to my v1, **same problem**.
+Identical to my v1, **same problems**. I actually like this one better — at least it's not pretending to be "stateless."
 
-> **My takeaway**: Few projects use JWT correctly. Most use it as a "random-string wrapper" — paying signature overhead for none of the stateless benefits.
+> **After looking around, I didn't find what I wanted.** Most projects either don't use JWT's stateless property (treating it as a random-string wrapper) or pull state right back in (JWT carrying sessionId).
+>
+> So I decided to **go to the other extreme** — if I'm going to use JWT, I'll use it all the way. **Stuff all the user info in the payload.**
+>
+> Enter v3.
 
 ## 3. v3: Stuff user info in the JWT payload, truly stateless
 
@@ -362,6 +371,12 @@ Compatibility: **string permission codes are still supported** for cases like MC
 
 ### 5.2 per-request deny check: a config knob for real-time
 
+> **Core idea: a deny key is not a "killer," it's a state broadcaster.**
+>
+> It doesn't tell the request "die." It tells the request "your client-side state is stale, go refresh." That's why deny checks tolerate eventual consistency — 99% of paths miss, only 1% actually hit and trigger the client to renegotiate.
+>
+> Every key in this section — `banned` / `refresh:{ts}` / `login_id` / `device` — is the same idea in a different shape.
+
 The cost of stateless JWT is **you can't change an issued token**. I added a switch:
 
 ```toml
@@ -568,6 +583,33 @@ Writing this out, I realized: **the whole deny mechanism collapses three concern
 | **v4** Dual tokens | Access for biz / Refresh swaps | **0 biz, 1 refresh** | 5-10 min rotation | Access still KB | Better than v3 but token bloat + DB pressure |
 | **v5** Bitmap + deny | v4 + bitmap + optional deny | **0 (default) / 1 (deny on)** | Instant (deny on) | **Tens of bytes** | Where I am now |
 
+## 6.5 Why this works — state distribution, not layering
+
+I'm not drawing a pyramid here, because these four things aren't an upstream/downstream stack. They're **orthogonal responsibilities**. A single business request **does not traverse four layers** — it walks a flat path, but at each step on that path sits a piece of state with its own frequency and consistency profile:
+
+```text
+Auth state distribution (responsibilities, not layers):
+
+  ┌─ access token   stateless: pure local decode + signature check, 0 IO
+  │                 frequency = every business request (QPS)
+  │
+  ├─ refresh token  hard state: must hit Redis
+  │                 frequency = once per ~15 min  (≈ QPS / 4500)
+  │
+  ├─ deny check     soft state: 99% miss, 1% triggers a client refresh
+  │                 frequency = 0 by default; 1 GET per request when on
+  │
+  └─ bitmap         static state: handed out at login, never queried at runtime
+                    frequency = 0
+```
+
+Average per business request: **1 signature check + ε Redis lookups**.
+ε depends on the deny toggle: off → 0; on → 1 lightweight GET (with extreme miss rates).
+
+The essence of this design is: **scatter state across positions by mutation frequency, instead of cramming it all into one synchronous interceptor**.
+
+This is also why I've opposed "stuff user_info into JWT" since v3 — that ties low-frequency static info to high-frequency signature checks. Changing user_info means waiting for every token to expire. Putting two different frequencies into the same slot is what made v3 fundamentally wrong.
+
 ## 7. What I learned
 
 If I had to compress five iterations into a few lines:
@@ -583,6 +625,22 @@ If I had to compress five iterations into a few lines:
 5. **Bitmap compression isn't a flex; it's forced by token bloat.** Watching a 4 KB Authorization header trigger 502s on the reverse proxy taught me where "inline data" physically ends. Every inlined claim deserves the question: "Can this stay under 1 KB?"
 
 6. **Config toggles are an engineering courtesy.** I used to want "the optimal solution." But every team's SLA, compliance, and performance bias differ. `per_request_deny_check` defaults off; you turn it on. Just like `concurrent_login` defaults on; you turn it off. **Give every adopter a vote.**
+
+## 7.5 This is not a universal solution
+
+I owe you a counter-current paragraph here — this stack **is genuinely complex**: dual tokens + bitmap + deny + device + refresh ts + a per-request switch + tiered TTLs. Stacked together, it does feel like a "combo punch."
+
+I built it because `summerrs-admin` simultaneously carries three concrete needs: **multi-tenant isolation, AI Gateway rate-limiting / billing, and admin-side force-kick**. Each one wants its own state machine. If your scenario doesn't have these, **don't copy this stack**. Concretely:
+
+| Your scenario | What I'd suggest |
+|---|---|
+| DAU < 1k, single-tenant, internal tool | A single JWT + Redis blocklist is enough. Skip deny / bitmap entirely. |
+| No "admin force-kick / instant ban" requirement | Drop the deny system, keep v4 dual tokens. |
+| Permission dimensions < 30 | The bitmap is a pessimization. Just use `Vec<String>`. |
+| Single-device login, no concurrency | The refresh flow simplifies dramatically. No need for the device dimension. |
+| You already have a mature OAuth provider | Integrate it. Don't roll your own. |
+
+My design **was pushed by the business**, not architected upfront. Each layer was added after the previous one hit a wall. This path may not fit you — but if you've hit the same wall, this post might save you a few months.
 
 ## 8. Unsolved / planned
 
