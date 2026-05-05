@@ -5,6 +5,7 @@ import {
 } from '@rspress/core/theme';
 import React from 'react';
 import { BlogAvatar } from './BlogAvatar';
+import styles from './BlogList.module.css';
 
 export interface BlogItem {
   title?: string;
@@ -54,42 +55,49 @@ export const useBlogPages = (): BlogItem[] => {
 };
 
 export function BlogList() {
-  const { h2: H2, p: P, a: A, hr: Hr } = getCustomMDXComponent();
-
+  const { a: A, p: P } = getCustomMDXComponent();
   const blogPages = useBlogPages();
   const lang = useLang();
 
   return (
-    <>
-      {blogPages.map(({ date, description, link, title, authors }, index) => (
-        <React.Fragment key={link || index}>
-          {title && (
-            <H2 id={link}>
-              <A href={link}>{title}</A>
-            </H2>
-          )}
-          {date && (
-            <P>
-              <em>
-                {new Intl.DateTimeFormat(lang, {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                }).format(date)}
-              </em>
-            </P>
-          )}
-          {authors && (
-            <>
-              {authors.map((author) => (
-                <BlogAvatar author={author} key={author} />
-              ))}
-            </>
-          )}
-          {description && <P {...renderInlineMarkdown(description)} />}
-          {index < blogPages.length - 1 && <Hr />}
-        </React.Fragment>
-      ))}
-    </>
+    <div className={styles.list}>
+      {blogPages.map(({ date, description, link, title, authors }, index) => {
+        const formattedDate = date
+          ? new Intl.DateTimeFormat(lang, {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            }).format(date)
+          : null;
+
+        return (
+          <article key={link || index} className={styles.card}>
+            <div className={styles.cardMain}>
+              <div className={styles.titleRow}>
+                <h2 className={styles.title} id={link}>
+                  {title && <A href={link}>{title}</A>}
+                </h2>
+                {formattedDate && (
+                  <time className={styles.date}>{formattedDate}</time>
+                )}
+              </div>
+              {description && (
+                <P
+                  className={styles.description}
+                  {...renderInlineMarkdown(description)}
+                />
+              )}
+            </div>
+            {authors && authors.length > 0 && (
+              <div className={styles.cardAside}>
+                {authors.map((author) => (
+                  <BlogAvatar key={author} author={author} compact />
+                ))}
+              </div>
+            )}
+          </article>
+        );
+      })}
+    </div>
   );
 }

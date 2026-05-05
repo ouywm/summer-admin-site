@@ -19,14 +19,25 @@ type AuthorMeta = {
   x?: string;
 };
 
-export function BlogAvatar({ author }: { author: string }) {
+interface BlogAvatarProps {
+  author: string;
+  /** 紧凑模式:用于博客索引卡片右上角 */
+  compact?: boolean;
+}
+
+export function BlogAvatar({ author, compact = false }: BlogAvatarProps) {
   const meta = AUTHORS[author as keyof typeof AUTHORS] as AuthorMeta | undefined;
   if (!meta) {
     return null;
   }
   const { name, title, github, avatar, x } = meta;
+
+  const containerClass = compact
+    ? `${styles.avatarContainer} ${styles.compact}`
+    : styles.avatarContainer;
+
   return (
-    <div className={styles.avatarContainer}>
+    <div className={containerClass}>
       <img src={avatar} alt={name} className={styles.avatar} />
       <div className={styles.info}>
         <div className={styles.name}>{name}</div>

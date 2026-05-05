@@ -1,3 +1,4 @@
+/* === 默认(文章详情页头像)=== */
 .avatarContainer {
   display: inline-flex;
   align-items: center;
@@ -55,4 +56,39 @@
 .link svg {
   width: 16px;
   height: 16px;
+}
+
+/* === 紧凑模式(博客索引卡片)=== */
+.avatarContainer.compact {
+  gap: 10px;
+  padding: 0;
+  margin-right: 0;
+}
+
+.avatarContainer.compact .avatar {
+  width: 48px;
+  height: 48px;
+}
+
+.avatarContainer.compact .name {
+  font-size: 0.8125rem;
+  line-height: 1.15;
+  font-weight: 600;
+}
+
+.avatarContainer.compact .title {
+  font-size: 0.6875rem;
+  line-height: 1.15;
+  margin-top: 2px;
+  margin-bottom: 4px;
+  color: var(--rp-c-text-2);
+}
+
+.avatarContainer.compact .links {
+  gap: 6px;
+}
+
+.avatarContainer.compact .link svg {
+  width: 14px;
+  height: 14px;
 }
