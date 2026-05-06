@@ -64,7 +64,6 @@
 .cardAside {
   flex-shrink: 0;
   display: flex;
-  align-self: center;
   align-items: center;
 }
 
