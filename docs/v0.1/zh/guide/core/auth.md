@@ -13,7 +13,7 @@ flowchart LR
     A[HTTP 请求] --> B[GroupAuthLayer]
     B --> C[JwtStrategy 解析 + 校验]
     C --> D[LoginUser extractor 注入]
-    D --> E[声明式宏:#[has_perm] / #[has_role]]
+    D --> E["声明式宏: #[has_perm] / #[has_role]"]
     E --> F[Service 层]
 ```
 
