@@ -1,50 +1,12 @@
 ---
-title: API 概览
+title: 在线 API 文档
 overview: true
-description: 汇总本地启动后最值得先验证的 API、MCP 和 AI 入口。
-published_at: 2026-04-26 10:00:00
+description: Summerrs Admin 的在线 API 文档。
+published_at: 2026-05-07 12:00:00
 ---
 
-这一组页面先不试图枚举整个仓库的全部接口，而是先把本地启动后最值得验证的几个入口集中起来。
+# 在线 API 文档
 
-## 首批建议关注的入口
+完整接口请查阅:
 
-- `GET /api/docs`
-  打开 OpenAPI 文档页，确认主应用和文档路由已经挂载成功
-- `POST /api/auth/login`
-  用 `Admin / 123456` 验证认证链路是否可用
-- `GET /api/user/info`
-  带上 access token 再验证一次鉴权接口
-- `POST /api/mcp`
-  嵌入式 MCP Server 的默认 HTTP 路径，实际完整地址是 `http://localhost:8080/api/mcp`
-- `POST /v1/chat/completions`
-  OpenAI 兼容入口，适合作为后续 AI Relay 验证点
-
-## MCP 的两种运行方式
-
-### 嵌入式
-
-随主应用启动，默认路径：
-
-```text
-http://localhost:8080/api/mcp
-```
-
-### 独立运行
-
-`summer-mcp` 也可以直接作为二进制启动：
-
-```bash
-cargo run -p summer-mcp --features standalone --bin summerrs-mcp -- \
-  --database-url 'postgres://admin:123456@localhost/summerrs-admin'
-```
-
-默认 standalone 地址：
-
-```text
-http://127.0.0.1:9090/mcp
-```
-
-## 先看哪一页
-
-- 查看项目 README 了解如何启动服务
+[https://summer-admin.apifox.cn/](https://summer-admin.apifox.cn/)

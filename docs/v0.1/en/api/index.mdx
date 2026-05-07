@@ -1,50 +1,12 @@
 ---
-title: API Overview
+title: Online API Docs
 overview: true
-description: Collect the most important API, MCP, and AI entry points to verify after local startup.
-published_at: 2026-04-26 10:00:00
+description: Summerrs Admin online API documentation.
+published_at: 2026-05-07 12:00:00
 ---
 
-This section does not try to enumerate every interface in the repository. It first gathers the most useful entry points to verify after local startup.
+# Online API Docs
 
-## First endpoints worth checking
+Browse the full API at:
 
-- `GET /api/docs`
-  Open the OpenAPI documentation page and confirm the main app and docs route are mounted
-- `POST /api/auth/login`
-  Use `Admin / 123456` to verify the authentication path
-- `GET /api/user/info`
-  Verify a protected endpoint with the access token
-- `POST /api/mcp`
-  The default HTTP path of the embedded MCP Server, with the full URL being `http://localhost:8080/api/mcp`
-- `POST /v1/chat/completions`
-  The OpenAI-compatible endpoint, useful as the next AI Relay verification point
-
-## Two ways to run MCP
-
-### Embedded
-
-Started together with the main app. Default path:
-
-```text
-http://localhost:8080/api/mcp
-```
-
-### Standalone
-
-`summer-mcp` can also be launched directly as a binary:
-
-```bash
-cargo run -p summer-mcp --features standalone --bin summerrs-mcp -- \
-  --database-url 'postgres://admin:123456@localhost/summerrs-admin'
-```
-
-Default standalone endpoint:
-
-```text
-http://127.0.0.1:9090/mcp
-```
-
-## Where to go next
-
-- Check the project README for how to start the service
+🔗 [https://summer-admin.apifox.cn/](https://summer-admin.apifox.cn/)
