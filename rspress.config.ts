@@ -9,8 +9,7 @@ import pluginGoogleAnalytics from 'rspress-plugin-google-analytics';
 import rspressPluginMermaid from 'rspress-plugin-mermaid';
 import rspressPluginReadingTime from 'rspress-plugin-reading-time';
 
-const isProduction = process.env.NODE_ENV === 'production';
-const siteUrl = 'https://ouywm.github.io/summer-admin-site/';
+const siteUrl = 'https://docs.admin.summerrs.com/';
 
 const plugins = [
   pluginSitemap({
@@ -73,7 +72,7 @@ if (clarityId) {
 }
 
 export default defineConfig({
-  base: isProduction ? '/summer-admin-site/' : '/',
+  base: '/',
   root: path.join(__dirname, 'docs'),
   lang: 'zh',
   locales: [
