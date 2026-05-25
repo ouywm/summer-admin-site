@@ -1,5 +1,6 @@
-import { getCustomMDXComponent as getOriginalMDXComponent } from '@rspress/core/theme-original';
+import { getCustomMDXComponent as getOriginalMDXComponent, Layout as BasicLayout } from '@rspress/core/theme-original';
 import type { ComponentProps } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 
 import { LocalizedReadingTime } from './components/LocalizedReadingTime';
 import './styles/reading-time.css';
@@ -22,5 +23,12 @@ function getCustomMDXComponent() {
   };
 }
 
-export { getCustomMDXComponent };
+const Layout = () => (
+  <>
+    <BasicLayout />
+    <Analytics />
+  </>
+);
+
+export { getCustomMDXComponent, Layout };
 export * from '@rspress/core/theme-original';
