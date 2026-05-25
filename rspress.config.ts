@@ -9,7 +9,10 @@ import pluginGoogleAnalytics from 'rspress-plugin-google-analytics';
 import rspressPluginMermaid from 'rspress-plugin-mermaid';
 import rspressPluginReadingTime from 'rspress-plugin-reading-time';
 
-const siteUrl = 'https://docs.admin.summerrs.com/';
+const isVercel = process.env.VERCEL === '1';
+const siteUrl = isVercel
+  ? 'https://docs.admin.summerrs.com/'
+  : 'https://ouywm.github.io/summer-admin-site/';
 
 const plugins = [
   pluginSitemap({
@@ -72,7 +75,7 @@ if (clarityId) {
 }
 
 export default defineConfig({
-  base: '/',
+  base: isVercel ? '/' : '/summer-admin-site/',
   root: path.join(__dirname, 'docs'),
   lang: 'zh',
   locales: [
