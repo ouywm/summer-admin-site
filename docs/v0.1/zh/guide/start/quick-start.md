@@ -89,26 +89,9 @@ curl -X POST http://localhost:8080/api/auth/login \
   -d '{"username":"Admin","password":"123456"}'
 ```
 
-### 常用维护命令
-
-```bash
-# 停止
-docker compose down
-
-# 停止 + 清空数据卷(⚠️ 会丢数据库内容)
-docker compose down -v
-
-# 只重启应用,不动 db / redis
-docker compose restart app
-
-# 重新构建应用镜像
-docker compose build app
-docker compose up -d app
-```
-
 ### 自定义端口
 
-如果本机已有服务占用默认端口,可在 `.env` 里修改:
+如果本机已有服务占用默认端口，可以在 `.env` 中设置这些变量，`docker-compose.yml` 会自动读取：
 
 ```bash
 POSTGRES_PORT=15432
@@ -117,7 +100,7 @@ S3_PORT=19000
 APP_PORT=18080
 ```
 
-`docker-compose.yml` 已支持通过环境变量配置端口。
+这些端口变量仅用于 Docker 部署，应用本身的配置在 `config/app.toml` 中。
 
 ## 方式二：本地开发
 
