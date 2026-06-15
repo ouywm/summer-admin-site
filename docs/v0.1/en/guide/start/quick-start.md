@@ -110,6 +110,8 @@ RUST_LOG=debug
 
 # S3 / MinIO / RustFS
 S3_ENDPOINT=http://localhost:9000
+S3_BUCKET=summer-admin
+S3_REGION=us-east-1
 S3_ACCESS_KEY=...
 S3_SECRET_KEY=...
 ```
