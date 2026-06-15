@@ -27,13 +27,14 @@ cd summerrs-admin
 
 ### 2. Configure Environment
 
-The `docker-compose.yml` provisions four services:
+The `docker-compose.yml` provisions five services:
 
 | Service | Image | Port | Purpose |
 |---|---|---|---|
 | `postgres` | `postgres:17-alpine` | 5432 | Primary store |
 | `redis` | `redis:7-alpine` | 6379 | Session / cache / rate limit |
 | `rustfs` | `rustfs/rustfs:latest` | 9000 / 9001 | S3-compatible storage |
+| `ratchjob` | `qingpan/ratchjob:stable` | 8725 / 8825 / 8925 | Job scheduler (XXL-Job compatible) |
 | `app` | multi-stage build | 8080 | Main app |
 
 Create or update `.env`:
@@ -45,6 +46,8 @@ S3_ACCESS_KEY=summerAK
 S3_SECRET_KEY=summerSK
 S3_ENDPOINT=http://rustfs:9000
 S3_BUCKET=summer-admin
+S3_REGION=us-east-1
+XXL_JOB_ACCESS_TOKEN=default_token
 RUST_LOG=info
 ```
 
@@ -102,6 +105,9 @@ Create `.env`:
 # Database connection
 DATABASE_URL=postgres://admin:123456@localhost/summerrs-admin
 
+# Redis connection
+REDIS_URL=redis://127.0.0.1/
+
 # JWT signing key (use openssl rand -base64 32 in production)
 JWT_SECRET="replace-with-a-strong-random-string"
 
@@ -114,6 +120,10 @@ S3_BUCKET=summer-admin
 S3_REGION=us-east-1
 S3_ACCESS_KEY=...
 S3_SECRET_KEY=...
+
+# XXL-Job (optional, skip if not using job scheduler)
+XXL_JOB_ADMIN_ADDRESSES=http://127.0.0.1:8725/xxl-job-admin
+XXL_JOB_ACCESS_TOKEN=default_token
 ```
 
 > ⚠️ `.env` is gitignored. Do not commit production secrets.
