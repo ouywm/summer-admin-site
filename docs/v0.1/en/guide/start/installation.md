@@ -6,8 +6,6 @@ published_at: 2026-05-04 10:10:00
 
 # Installation
 
-> The full Chinese version (with detailed troubleshooting) is at [`/guide/start/installation`](/guide/start/installation). The English page is being expanded — contributions welcome.
-
 ## Toolchain
 
 | Tool | Recommended | Purpose |
@@ -25,27 +23,28 @@ published_at: 2026-05-04 10:10:00
 git clone https://github.com/ouywm/summerrs-admin.git
 cd summerrs-admin
 
-# 2. Bring up dependencies
+# 2. Bring up dependencies (Docker)
 docker compose up -d postgres redis rustfs
 
-# 3. Initialize database (run sql/sys/*.sql with psql)
-for f in sql/sys/*.sql; do
-  psql -U admin -d summerrs-admin -f "$f"
-done
-
-# 4. Build & run
-cargo build --release
-cargo run -p app --release
+# 3. Run (database auto-initializes via SeaORM migrations)
+cargo run --bin app
 ```
+
+> 💡 **Tip**: Database schema is automatically initialized on first startup via SeaORM migrations. No manual SQL execution needed.
 
 ## Required env vars (`.env`)
 
 ```bash
-DATABASE_URL=postgres://admin:123456@localhost/summerrs-admin?options=-c%20TimeZone%3DAsia%2FShanghai
-SUMMER_MCP_DATABASE_URL=${DATABASE_URL}
-POSTGRES_PASSWORD=replace-with-strong
-JWT_SECRET="replace-with-a-64+char-random-string"
+# Database connection
+DATABASE_URL=postgres://admin:123456@localhost/summerrs-admin
+
+# JWT signing key (use openssl rand -base64 32 in production)
+JWT_SECRET="replace-with-a-strong-random-string"
+
+# Log level
 RUST_LOG=debug
+
+# S3 / MinIO / RustFS
 S3_ENDPOINT=http://localhost:9000
 S3_ACCESS_KEY=...
 S3_SECRET_KEY=...
@@ -53,4 +52,4 @@ S3_SECRET_KEY=...
 
 > ⚠️ `.env` is gitignored. Do not commit production secrets.
 
-See [Docker](./docker) for the compose-managed path, [First run](./first-run) for end-to-end verification.
+See [Docker](./docker) for the compose-managed path.

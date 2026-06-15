@@ -57,25 +57,9 @@ docker compose ps
 
 应用监听 `8080`,RustFS 控制台监听 `9001`(默认账号 `summerAK / summerSK`)。
 
-## 3. 初始化数据库
+> 💡 **提示**: 数据库会在应用首次启动时自动初始化,无需手动执行 SQL。
 
-第一次启动后,容器里没有业务表。用宿主机的 `psql` 或者 `docker exec` 把 SQL 跑一遍:
-
-```bash
-# 进入 postgres 容器
-docker exec -it summerrs-postgres bash
-
-# 在容器里(SQL 文件需要先挂卷或拷贝进去),用 psql 执行
-psql -U admin -d summerrs-admin -f /path/to/sql/sys/user.sql
-# ...其余文件同理
-
-# 或者宿主机直接连
-psql -h localhost -U admin -d summerrs-admin -f sql/sys/user.sql
-```
-
-> 仓库后续会提供 `migration` 子命令来自动跑 SQL,目前手动执行即可。详见 [安装](./installation) 第四步。
-
-## 4. 验证
+## 3. 验证
 
 ```bash
 # OpenAPI 文档
@@ -87,9 +71,7 @@ curl -X POST http://localhost:8080/api/auth/login \
   -d '{"username":"Admin","password":"123456"}'
 ```
 
-下一页 [首次启动](./first-run) 给出更细的端到端验证脚本。
-
-## 5. 常用维护命令
+## 4. 常用维护命令
 
 ```bash
 # 停止

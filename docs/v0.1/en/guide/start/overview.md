@@ -6,7 +6,7 @@ published_at: 2026-05-04 10:00:00
 
 # What is Summerrs Admin
 
-Summerrs Admin is a production-grade admin platform written **entirely in Rust**, built on top of the [Summer framework](https://github.com/ouywm/spring-rs) (a Spring-style application skeleton for Rust). It packages auth, multi-tenancy, AI gateway, messaging, object storage, and declarative auditing into **one binary** as composable plugins.
+Summerrs Admin is a production-grade admin platform written **entirely in Rust**, built on top of the [Summer framework](https://github.com/ouywm/spring-rs) (a Spring-style application skeleton for Rust). It integrates auth, multi-tenancy, AI gateway, messaging, object storage, and declarative auditing as composable plugins, ready to use out of the box.
 
 It is not a demo, nor a single component showcase — it is a **complete, self-contained, deployable** admin foundation.
 
@@ -34,7 +34,7 @@ It is not a demo, nor a single component showcase — it is a **complete, self-c
 
 ## Reading path
 
-- Run it first → [Installation](./installation) → [Docker](./docker) → [First run](./first-run) → [Default account](./default-account)
+- Run it first → [Installation](./installation) → [Docker](./docker)
 - Architecture → [Overview](../architecture/overview) → [17 plugins](../architecture/plugins) → [Directory layout](../architecture/directory)
 - Core mechanics → [Auth](../core/auth) / [Multi-tenancy](../core/multi-tenancy) / [AI Gateway](../core/ai-gateway) / [MCP](../core/mcp) / [Rate-limit](../core/rate-limit)
 - API entry points → [API overview](/en/api/)

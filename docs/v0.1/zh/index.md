@@ -6,7 +6,7 @@ link-rss: updates
 hero:
   name: Summerrs Admin
   text: 全栈 Rust 后台管理系统
-  tagline: 把 LLM 网关、多租户分片、MCP 工具、声明式审计装进同一个 Rust 二进制
+  tagline: 
   actions:
     - theme: brand
       text: 5 分钟跑起来

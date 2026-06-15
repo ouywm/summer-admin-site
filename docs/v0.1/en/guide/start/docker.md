@@ -37,14 +37,9 @@ docker compose logs -f app
 docker compose ps
 ```
 
-## 3. Initialize DB
+> 💡 **Tip**: Database schema is automatically initialized on first startup. No manual SQL execution needed.
 
-```bash
-psql -h localhost -U admin -d summerrs-admin -f sql/sys/user.sql
-# repeat for the rest of sql/sys/*.sql, sql/ai/*.sql, sql/tenant/*.sql
-```
-
-## 4. Verify
+## 3. Verify
 
 ```bash
 curl http://localhost:8080/docs                                     # OpenAPI
