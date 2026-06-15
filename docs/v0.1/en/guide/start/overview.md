@@ -34,7 +34,7 @@ It is not a demo, nor a single component showcase — it is a **complete, self-c
 
 ## Reading path
 
-- Run it first → [Installation](./installation) → [Docker](./docker)
+- Run it first → [Quick Start](./quick-start)
 - Architecture → [Overview](../architecture/overview) → [17 plugins](../architecture/plugins) → [Directory layout](../architecture/directory)
 - Core mechanics → [Auth](../core/auth) / [Multi-tenancy](../core/multi-tenancy) / [AI Gateway](../core/ai-gateway) / [MCP](../core/mcp) / [Rate-limit](../core/rate-limit)
 - API entry points → [API overview](/en/api/)
