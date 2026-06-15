@@ -134,7 +134,7 @@ XXL_JOB_ACCESS_TOKEN=default_token
 cargo run --bin app
 ```
 
-The app auto-initializes the database on first startup. Access at `http://localhost:3000`.
+The app auto-initializes the database on first startup. Access at `http://localhost:8080`.
 
 ## Troubleshooting
 

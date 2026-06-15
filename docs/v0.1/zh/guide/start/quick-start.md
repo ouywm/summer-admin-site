@@ -163,22 +163,4 @@ XXL_JOB_ACCESS_TOKEN=default_token
 cargo run --bin app
 ```
 
-项目会在首次启动时自动完成数据库初始化。启动后访问 `http://localhost:3000` 即可。
-
-## 常见问题
-
-**编译报 `summer` / `summer-web` 找不到?**
-
-仓库 `Cargo.toml` 末尾有 `[patch.crates-io]` 段,从 GitHub 拉特定 commit 的 fork。第一次编译会自动 clone,网络受限时建议配置 Cargo 的 `[source.crates-io]` 镜像或 GitHub 代理。
-
-**Docker 自定义构建参数?**
-
-`Dockerfile` 是多阶段构建,默认 build `app` crate。如果以后拆出更多二进制(例如把 `summer-mcp` 作 standalone),可以在 `docker-compose.yml` 中修改 `APP_NAME`:
-
-```dockerfile
-build:
-  context: .
-  dockerfile: Dockerfile
-  args:
-    APP_NAME: app
-```
+项目会在首次启动时自动完成数据库初始化。启动后访问 `http://localhost:8080` 即可。
