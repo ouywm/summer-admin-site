@@ -104,8 +104,6 @@ use summer_auth::LoginUser;
 use summer_common::{error::ApiResult, response::Json};
 use summer_web::{get_api, post_api};
 
-// 必须登录,无权限要求
-#[login]
 #[get_api("/profile")]
 async fn get_profile(LoginUser { session, .. }: LoginUser) -> ApiResult<Json<ProfileVo>> {
     Ok(Json(load_profile(&session.login_id).await?))

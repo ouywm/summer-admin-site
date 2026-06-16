@@ -1,69 +1,157 @@
 ---
-title: Directory Layout
-description: Workspace crates, key files, where new business code should go.
-published_at: 2026-05-04 11:20:00
+title: Project Structure
+description: Summerrs Admin workspace layout, crate organization, and key file locations
+published_at: 2026-06-16 14:00:00
 ---
 
-# Directory Layout
+# Project Structure
 
-> Full Chinese reference with anchor files: [`/guide/architecture/directory`](/guide/architecture/directory).
+`summerrs-admin` is a Cargo workspace with all business code organized as independent crates.
 
-```text
-summerrs-admin/
-├── crates/
-│   ├── app/                          # binary entry, assembly only
-│   ├── summer-admin-macros/          # #[login] / #[has_perm] / #[rate_limit] / #[log] / #[job_handler]
-│   ├── summer-auth/                  # JWT, session, path policy
-│   ├── summer-common/                # ApiResult / Json<T> / pagination / extractors
-│   ├── summer-domain/                # cross-crate domain services
-│   ├── summer-system/                # System APIs (users, roles, menus, files, ...)
-│   │   ├── src/{router,service,plugins,socketio,job}/
-│   │   └── model/                    # entity / dto / vo / views
-│   ├── summer-ai/
-│   │   ├── core/                     # protocol core
-│   │   ├── model/                    # entity + DTO/VO
-│   │   ├── relay/                    # relay engine + OpenAI/Claude/Gemini routes
-│   │   ├── admin/                    # AI admin APIs
-│   │   ├── billing/                  # 3-stage billing
-│   │   └── agent/                    # rig-core agent
-│   ├── summer-sharding/              # SQL rewriting / multi-tenancy / sharding / encryption
-│   ├── summer-sql-rewrite/           # auth context → SQL injection
-│   ├── summer-mcp/                   # embedded / standalone MCP server
-│   │   └── src/{plugin,server,runtime,prompts,table_tools/,tools/}
-│   ├── summer-plugins/               # S3 / IP2Region / background task / batch log
-│   └── summer-job-dynamic/           # DB-driven cron scheduler
-├── config/                           # app.toml + app-{dev,prod,test}.toml
-├── sql/                              # source-of-truth DB schema
-│   ├── sys/  ai/  tenant/  biz/
-├── doc/                              # deployment / migration guides (zh-leaning)
-├── docs/                             # research / reference materials
-├── locales/                          # rust-i18n resources
-├── build-tools/                      # fmt / clippy / pre-commit scripts
-├── docker-compose.yml
-└── Dockerfile
+## Workspace Members
+
+From root `Cargo.toml`:
+
+```toml
+[workspace]
+members = [
+    "crates/app",
+    "crates/summer-admin-macros",
+    "crates/summer-auth",
+    "crates/summer-common",
+    "crates/summer-domain",
+    "crates/summer-mcp",
+    "crates/summer-migration",
+    "crates/summer-plugins",
+    "crates/summer-system",
+    "crates/summer-system/model",
+]
 ```
 
-## Where new business code goes
+## Top-Level Layout
 
-Adding a "Tag" module:
+```tree
+summerrs-admin/
+├── crates/               # All Rust code
+├── config/               # Multi-environment config (app.toml, app-dev.toml, app-prod.toml)
+├── data/                 # Static data (ip2region DB, JWT keys, etc.)
+├── build-tools/          # Format and lint scripts
+├── locales/              # I18n resources (rust-i18n)
+├── logs/                 # Runtime logs
+├── doc/                  # Deployment docs, technical guides
+├── docs/                 # Research materials
+├── docker-compose.yml    # One-shot environment
+├── Dockerfile            # Multi-stage build
+└── Cargo.toml            # Workspace root
+```
 
-1. SQL → `sql/sys/tag.sql`
-2. Entity → `crates/summer-system/model/src/entity/sys_tag.rs` (use MCP `generate_entity_from_table`)
-3. DTO / VO → `model/src/dto/sys_tag.rs` + `vo/sys_tag.rs`
-4. Service → `crates/summer-system/src/service/sys_tag_service.rs`
-5. Router → `crates/summer-system/src/router/sys_tag.rs` with `#[has_perm("system:tag:list")]`
-6. Wire it up → add `let router = sys_tag::routes(router);` to `router/mod.rs`
-7. Menus + perms → use MCP `menu_tool::plan_apply`
+## Crates Structure
 
-## Anchor files
+### Core Crates
 
-| Purpose | Path |
+| Crate | Purpose |
 |---|---|
-| Binary entry | `crates/app/src/main.rs` |
-| Router assembly | `crates/app/src/router.rs` |
-| Default config | `config/app.toml` |
-| System router examples | `crates/summer-system/src/router/{auth,sys_user}.rs` |
-| MCP server | `crates/summer-mcp/src/{plugin,server,runtime}.rs` |
-| AI relay routers | `crates/summer-ai/relay/src/router/{openai,claude,gemini}/` |
-| AI admin routers | `crates/summer-ai/admin/src/router/` (15+ files) |
-| Macro implementations | `crates/summer-admin-macros/src/{auth_macro,log_macro,rate_limit_macro}.rs` |
+| **app** | Binary entry point, assembles all plugins and routes |
+| **summer-system** | System management (users, roles, menus, dicts, config, files, notifications, logs, monitoring) |
+| **summer-system/model** | System domain data models (Entity / DTO / VO), web-agnostic |
+
+### Infrastructure Crates
+
+| Crate | Purpose |
+|---|---|
+| **summer-common** | Common types (ApiResult, pagination, validation, extractors) |
+| **summer-auth** | JWT auth, session management, permission policies |
+| **summer-domain** | Domain services (MenuDomainService, DictDomainService), cross-crate reuse |
+| **summer-plugins** | Infrastructure plugins (S3, IP2Region, background tasks, batch logging) |
+| **summer-admin-macros** | Declarative macros (`#[login]`, `#[has_perm]`, `#[rate_limit]`, `#[log]`) |
+
+### Tool Crates
+
+| Crate | Purpose |
+|---|---|
+| **summer-mcp** | MCP Server (schema discovery, table CRUD, code generation, menu/dict tools) |
+| **summer-migration** | Database migrations (SeaORM migration) |
+| **summer-codegen** | Code generation utilities |
+
+## Key Files
+
+### Entry and Config
+
+| File | Purpose |
+|---|---|
+| `crates/app/src/main.rs` | Application entry, plugin registration |
+| `crates/app/src/router.rs` | Global route assembly |
+| `config/app.toml` | Default config |
+| `config/app-dev.toml` | Development config |
+| `config/app-prod.toml` | Production config |
+
+### System Domain
+
+| File | Purpose |
+|---|---|
+| `crates/summer-system/src/router/` | System routes (users, roles, menus, etc.) |
+| `crates/summer-system/src/service/` | Business logic layer (Services) |
+| `crates/summer-system/model/src/entity/` | SeaORM entities |
+| `crates/summer-system/model/src/dto/` | Request DTOs |
+| `crates/summer-system/model/src/vo/` | Response VOs |
+
+### MCP
+
+| File | Purpose |
+|---|---|
+| `crates/summer-mcp/src/plugin.rs` | MCP plugin entry |
+| `crates/summer-mcp/src/server.rs` | MCP server implementation |
+| `crates/summer-mcp/src/tools/` | MCP tools (code generation, etc.) |
+| `crates/summer-mcp/templates/` | Code generation templates |
+
+## Crate Organization Principles
+
+1. **app** - Assembly only, no business logic
+2. **summer-system** - All system management business code
+3. **summer-system/model** - Pure data models, no web/service dependencies
+4. **summer-common** - Truly generic types and utilities
+5. **summer-plugins** - Reusable infrastructure plugins
+6. **summer-domain** - Cross-module domain services
+
+## Configuration Loading
+
+Config files switch via `SUMMER_ENV` environment variable:
+
+| `SUMMER_ENV` | Loaded Files |
+|---|---|
+| Unset or `dev` | `app.toml` + `app-dev.toml` |
+| `prod` | `app.toml` + `app-prod.toml` |
+| `test` | `app.toml` + `app-test.toml` |
+
+Environment variable interpolation:
+
+```toml
+[sea-orm]
+uri = "${DATABASE_URL:postgres://admin:123456@localhost/summerrs-admin}"
+
+[auth]
+jwt_secret = "${JWT_SECRET:change-me-in-local-dev}"
+```
+
+## Common Commands
+
+```bash
+# Format
+cargo fmt
+
+# Lint
+cargo clippy --workspace --all-targets
+
+# Build
+cargo build --release --bin app
+
+# Run
+cargo run --bin app
+```
+
+## Next Steps
+
+- [Plugin Overview](./plugins) - All plugins and their configurations
+- [Authentication](../core/auth) - JWT and permission system
+- [Multi-tenancy](../core/multi-tenancy) - Tenant isolation
+- [MCP](../core/mcp) - Model Context Protocol integration

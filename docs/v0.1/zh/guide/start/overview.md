@@ -26,7 +26,7 @@ published_at: 2026-05-04 10:00:00
 ## 阅读路线
 
 - 想先跑起来 → [快速开始](./quick-start)
-- 想搞清楚架构 → [整体架构](../architecture/overview) → [17 个插件](../architecture/plugins) → [项目结构](../architecture/directory)
+- 想搞清楚架构 → [项目结构](../architecture/directory) → [17 个插件](../architecture/plugins)
 - 想看核心机制 → [认证授权](../core/auth) / [多租户](../core/multi-tenancy) / [AI 网关](../core/ai-gateway) / [MCP](../core/mcp) / [限流](../core/rate-limit)
 - 想看 API 入口 → [API 概览](/api/)
 
