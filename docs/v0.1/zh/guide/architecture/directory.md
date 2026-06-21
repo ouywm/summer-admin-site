@@ -71,7 +71,6 @@ summerrs-admin/
 |---|---|
 | **summer-mcp** | MCP Server（Schema 发现、表 CRUD、代码生成、菜单/字典工具） |
 | **summer-migration** | 数据库迁移（SeaORM migration） |
-| **summer-codegen** | 代码生成工具 |
 
 ## 关键文件位置
 
@@ -151,7 +150,6 @@ cargo run --bin app
 
 ## 下一步
 
-- [17 个插件清单](./plugins) - 每个插件的作用和配置
 - [认证授权](../core/auth) - JWT 鉴权和权限系统
 - [多租户](../core/multi-tenancy) - 租户隔离机制
 - [MCP](../core/mcp) - Model Context Protocol 集成

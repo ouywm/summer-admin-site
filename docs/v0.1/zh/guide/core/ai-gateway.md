@@ -1,227 +1,263 @@
 ---
-title: AI 网关
-description: OpenAI / Claude / Gemini 三协议入口、6 维路由、三阶段计费、热更新与故障转移。
+title: AI 网关接入
+description: 介绍 AI 管理后台、模型渠道、API Key、限流计费、请求日志、MCP 工具和 relay 协议入口的推荐边界。
 published_at: 2026-05-04 12:20:00
 ---
 
-# AI 网关
+# AI 网关接入
 
-`summer-ai` 是一个内嵌在主应用里的 LLM 中转网关。它和外部独立项目(one-api / new-api / AxonHub 等)的差异是:**和后台共用同一套鉴权、计费、审计、数据库**,运维只需要管一个进程。
+Summerrs Admin 可以作为 AI 网关的管理后台底座:用系统的登录认证、RBAC、菜单按钮、资源权限、字典、操作日志和 MCP 工具来承载 AI 渠道、模型、API Key、用量、审计和运维能力。
 
-## crate 划分
+AI 网关通常由两部分组成:
 
-| 子 crate | 作用 |
+| 部分 | 面向对象 | 典型职责 |
+|---|---|---|
+| AI 管理后台 | 管理员、运营、开发人员 | 管理渠道、模型、API Key、配额、路由、日志和告警 |
+| AI relay | 应用程序、外部调用方、Agent | 接收 OpenAI/Claude/Gemini 等协议请求,鉴权后转发到上游模型 |
+
+后台管理接口适合放进 `/api` 体系,复用管理员 JWT、按钮权限、资源权限和 `ApiResult` 响应。relay 协议入口建议作为独立路由组接入,例如 `/v1/chat/completions`、`/v1/messages`、`/v1beta/models/*`,并使用 API Key、模型路由、流式响应和专用错误模型。
+
+## 可以复用的后台能力
+
+AI 网关管理侧可以直接复用 Summerrs Admin 的基础能力:
+
+| 能力 | 用途 |
 |---|---|
-| `summer-ai/core` | 协议核心类型与 trait |
-| `summer-ai/model` | SeaORM 实体 + DTO / VO(数据契约) |
-| `summer-ai/relay` | 中转引擎 + OpenAI/Claude/Gemini 协议入口 |
-| `summer-ai/admin` | AI 管理后台 API(channel / vendor / token / quota...) |
-| `summer-ai/billing` | 三阶段计费 + 配额扣减 |
-| `summer-ai/agent` | rig-core 驱动的 Agent(可选) |
+| 登录认证 | 管理员通过 JWT 登录后台,管理 AI 资源 |
+| RBAC | 用 `ai:*` 权限控制渠道、模型、Key、日志等操作 |
+| 后端资源权限 | 将 AI 管理 API 登记到 `sys.resource`,再绑定按钮权限 |
+| 操作日志 | 管理动作通过 `#[log]` 写入 `sys.operation_log` |
+| 字典 | 管理模型状态、渠道类型、计费单位、日志状态等枚举 |
+| 菜单 | 在后台侧增加 AI 管理页面和按钮 |
+| 限流 | 对管理接口或 relay 请求按用户、Header、API Key 进行保护 |
+| MCP | 让 AI 助手读取 schema、生成 CRUD、规划菜单和字典 |
 
-## 三大入口协议
+这意味着 AI 模块可以专注在模型网关自身的领域能力上,后台通用能力继续沿用系统已有机制。
 
-`crates/summer-ai/relay/src/router/mod.rs` 把 relay 拆成三个独立子路由,每家协议独立鉴权 + 独立 panic guard:
+## 推荐模块边界
 
-| 协议 | 路径 | 鉴权 | 错误风格 |
-|---|---|---|---|
-| **OpenAI** | `/v1/chat/completions` `/v1/responses` `/v1/models` | API key (`Bearer sk-xxx`) | OpenAI 风格 `{"error": {...}}` |
-| **Claude** | `/v1/messages` | API key | Claude 风格 `{"type": "error", ...}` |
-| **Gemini** | `/v1beta/models/{target}` | API key | Gemini 风格错误 JSON |
+AI 管理后台和 relay 协议入口的鉴权方式、错误格式和响应类型不同,推荐拆成清晰的模块:
+
+```text
+crates/
+  summer-ai-core/        # 协议类型、错误模型、共享 trait
+  summer-ai-admin/       # /api/ai/* 管理后台接口
+  summer-ai-relay/       # /v1/* 协议入口和上游转发
+  summer-ai-model/       # SeaORM 实体、DTO、VO
+  summer-ai-billing/     # 配额、计费、request log
+```
+
+主应用可以同时注册管理侧和 relay 侧:
 
 ```rust
-// crates/summer-ai/relay/src/router/mod.rs
-let openai = grouped_router(relay_openai_group())
-    .layer(GroupAuthLayer::new(ApiKeyStrategy::for_group(
-        relay_openai_group(), ErrorFlavor::OpenAI)))
-    .layer(middleware::from_fn(openai_panic_guard));
-// claude / gemini 同理
+app.add_plugin(SummerAuthPlugin)
+   .add_plugin(ResourcePermissionPlugin)
+   .add_plugin(AiAdminPlugin)
+   .add_plugin(AiRelayPlugin);
 ```
 
-> 关键设计:每家 flavor 由路由结构静态决定,鉴权阶段的 panic 也会被对应 flavor 抓住。
+两类入口建议分开设计:
 
-## 6 维动态路由
+| 入口 | 鉴权方式 | 路径 | 响应风格 |
+|---|---|---|---|
+| AI 管理后台 | 管理员 JWT + RBAC | `/api/ai/*` | `ApiResult` / JSON |
+| OpenAI 兼容 relay | API Key | `/v1/chat/completions` 等 | OpenAI 风格错误 JSON/SSE |
+| Claude 兼容 relay | API Key | `/v1/messages` | Anthropic 风格错误 JSON/SSE |
+| Gemini 兼容 relay | API Key 或 query key | `/v1beta/models/*` | Gemini 风格错误 JSON |
 
-`summer-ai/relay/src/service/` 把"模型请求 → 上游渠道"的映射做成 6 个维度,可在数据库里热改:
+这样可以避免把管理员登录态、按钮权限、API Key、流式响应和第三方协议错误模型混在一条链路里。
 
-| 维度 | 表 | 用途 |
+## 管理后台功能
+
+AI 管理后台通常包含这些页面:
+
+| 页面 | 能力 |
+|---|---|
+| 渠道管理 | 配置 OpenAI、Claude、Gemini、自建模型等上游渠道 |
+| 模型管理 | 维护模型名称、上游映射、上下文长度、价格和能力标签 |
+| API Key 管理 | 创建、禁用、轮换、过期、绑定调用方和配额 |
+| 路由规则 | 按模型、租户、Key、权重、优先级或健康状态选择上游 |
+| 用量统计 | 查看请求数、token、费用、延迟、成功率 |
+| 请求日志 | 检索 request id、调用方、模型、状态、错误摘要 |
+| 告警配置 | 对错误率、余额、渠道不可用等事件发出提醒 |
+
+后台接口可以沿用系统路由风格:
+
+```rust
+#[log(module = "AI 渠道", action = "创建渠道", biz_type = Create)]
+#[has_perm("ai:channel:create")]
+#[post_api("/ai/channel")]
+pub async fn create_channel(...) -> ApiResult<()> {
+    // ...
+}
+```
+
+菜单按钮可以按业务对象组织:
+
+```text
+ai:channel:list
+ai:channel:create
+ai:channel:update
+ai:channel:delete
+ai:model:list
+ai:model:update
+ai:token:list
+ai:token:create
+ai:token:disable
+ai:request-log:list
+ai:usage:list
+```
+
+如果希望资源权限层也生效,需要把 AI 管理 API 登记到 `sys.resource`,再通过 `sys.action_resource` 绑定到对应 Button。策略更新可以调用:
+
+```http
+POST /api/system/resource-permission/reload
+```
+
+## API Key 鉴权
+
+relay 面向程序调用,建议使用独立 API Key,不要复用管理员 JWT。
+
+常见请求格式:
+
+```http
+Authorization: Bearer sk-xxxx
+```
+
+API Key 至少需要包含这些信息:
+
+| 字段 | 说明 |
+|---|---|
+| token hash | 只保存 hash,避免明文 Key 落库 |
+| owner | 所属用户、租户或应用 |
+| enabled | 是否启用 |
+| quota | 调用次数、token 或金额配额 |
+| allowed models | 可调用的模型范围 |
+| rate limit | Key 级限流策略 |
+| expires_at | 过期时间 |
+| last_used_at | 最近使用时间 |
+
+鉴权流程可以设计为:
+
+```text
+解析 Authorization -> hash 查 Key -> 校验启用/过期/模型范围 -> 计算限流和配额 -> 注入调用上下文
+```
+
+管理后台展示 Key 时只显示前后缀,创建后只返回一次明文,后续通过轮换机制替换。
+
+## 模型路由
+
+模型路由负责把客户端请求的模型映射到真实上游:
+
+```text
+client model: gpt-4o-mini
+        |
+        v
+routing rule: openai-primary 80%, openai-backup 20%
+        |
+        v
+upstream model: gpt-4o-mini / gpt-4.1-mini / custom alias
+```
+
+常见路由维度:
+
+| 维度 | 用途 |
+|---|---|
+| 模型别名 | 对外暴露稳定模型名,内部可切换上游 |
+| 权重 | 多渠道按比例分流 |
+| 优先级 | 主备切换 |
+| 健康状态 | 跳过不可用渠道 |
+| 租户或 Key | 给不同客户配置不同渠道 |
+| 成本策略 | 优先低价模型,必要时升级 |
+
+路由结果建议写入请求日志,方便排查“客户端请求的是哪个模型,最终打到了哪个上游”。
+
+## 流式响应
+
+LLM relay 经常返回 SSE 或 chunked body。流式响应和普通后台 JSON 有几个差异:
+
+| 差异 | 处理建议 |
+|---|---|
+| usage 可能在结尾才出现 | 结束时补写 request log |
+| 上游可能中途断开 | 记录 canceled 或 upstream_error |
+| 已经返回 200 后仍可能失败 | 用流内错误事件表达,日志记录最终状态 |
+| 响应体可能很大 | 不把完整响应写入操作日志 |
+
+管理动作继续使用 `#[log]`; relay 请求建议写入专门的 AI request log,例如:
+
+| 字段 | 说明 |
+|---|---|
+| request_id | 链路 ID |
+| protocol | openai / claude / gemini |
+| endpoint | chat_completions / messages 等 |
+| client_model | 客户端请求模型 |
+| upstream_model | 实际上游模型 |
+| token_id | 调用方 API Key |
+| status | success / error / canceled |
+| prompt_tokens / completion_tokens | usage |
+| latency_ms | 总耗时 |
+| error_detail | 错误摘要 |
+
+这样既能保留后台操作审计,也能满足 relay 的高频、流式、计费型日志需求。
+
+## 限流与配额
+
+`summer-common::rate_limit` 提供 `#[rate_limit]`、`RateLimitEngine` 和 cost-based 限流能力。管理接口可以使用声明式限流,relay 更适合按 API Key 和 token 成本做控制。
+
+对 LLM 请求,推荐在真正调用上游前预扣额度:
+
+```rust
+let reservation = rate_limit_ctx
+    .reserve(&token_key, config, estimated_tokens, "请求过于频繁")
+    .await?;
+
+// 上游成功后按真实 usage commit;失败或估算过高时 release/refund。
+```
+
+常见策略:
+
+| 策略 | 说明 |
+|---|---|
+| Key 级 QPS | 防止单个 Key 打爆服务 |
+| 模型级并发 | 保护昂贵模型或低并发上游 |
+| token 预扣 | 适合按 token 配额控制 |
+| 租户总额 | 多个 Key 共享租户级额度 |
+| 渠道熔断 | 上游异常时自动降级或切换 |
+
+如果 API Key 放在 `Authorization` 中,可以先由 relay 鉴权层解析 Key,再用解析后的 token 标识调用 `RateLimitContext`。
+
+## 与 MCP 的关系
+
+MCP 和 AI relay 解决的是不同问题:
+
+| 能力 | 面向对象 | 作用 |
 |---|---|---|
-| **协议家族** | 静态枚举(OpenAI / Claude / Gemini) | 决定入口协议 |
-| **Endpoint** | `ai.routing_target` | `chat_completions` / `messages` / `responses` 等具体能力点 |
-| **凭证** | `ai.channel_account` | 上游 API key / OAuth token,支持轮询和故障转移 |
-| **模型映射** | `ai.model_config` | 客户端模型名 → 上游真实模型名(例如 `gpt-4o` → `chatgpt-4o-latest`) |
-| **额外 headers** | `ai.routing_rule.headers` | 给上游加自定义 header(组织 id、项目 id 等) |
-| **路由策略** | `ai.routing_rule.strategy` | round_robin / weighted / priority / fallback |
+| `summer-mcp` | AI 助手、开发工具、运维工具 | 读取 schema、调用表工具、生成代码、管理菜单/字典 |
+| AI relay | 应用程序、Agent、外部客户端 | 接收模型请求并转发到 OpenAI/Claude/Gemini 等上游 |
 
-请求路由过程:
-
-```mermaid
-flowchart TD
-    A[POST /v1/chat/completions<br/>model=gpt-4o] --> B[ApiKeyStrategy 校验 token]
-    B --> C[查 token 关联的 group / quota]
-    C --> D[查 routing_rule:gpt-4o → 上游 channel 集合]
-    D --> E[按 strategy 选一个 channel]
-    E --> F[查 channel_account 拿 key]
-    F --> G[查 model_config:本地名 → 上游名]
-    G --> H[预扣配额 Reserve]
-    H --> I[转发上游 + 透传流式响应]
-    I --> J{成功?}
-    J -->|是| K[Settle 真实计费]
-    J -->|否,非流式| L[Refund + 故障转移到下一个 channel]
-    J -->|否,流式| M[Refund]
-```
-
-## 40+ 上游适配器
-
-`relay/src/service/chat/` 用 ZST(零大小类型)+ 静态分发的方式实现,**零运行时开销**。常见适配:
-
-| 类别 | 上游 |
-|---|---|
-| OpenAI 兼容 | 官方 OpenAI / Azure OpenAI / DeepSeek / 阶跃 / 智谱 / Moonshot / 零一万物 / SiliconFlow ... |
-| Anthropic 系 | 官方 Claude API |
-| Google 系 | Gemini API / Vertex AI |
-| OAuth | OpenAI ChatGPT OAuth / Claude OAuth(需要 `summer_ai_relay::service::oauth/`) |
-| 国产专门 | 通义 / 文心 / 豆包 / 混元 ... |
-
-新增适配只需要实现一个小 trait,放到 `service/chat/` 下,inventory 自动注册。
-
-## 三阶段计费
-
-`summer-ai/billing` 的计费链路是原子三段:
-
-```mermaid
-sequenceDiagram
-    participant Req as 请求进入
-    participant B as Billing
-    participant Q as 用户配额
-    participant Up as 上游
-
-    Req->>B: Reserve(估算 tokens × 单价)
-    B->>Q: 预扣额度
-    Q-->>B: 成功
-    B->>Up: 转发
-    Up-->>B: 真实 usage
-    B->>B: Settle(真实费用 - 预扣)
-    alt 真实 < 预扣
-        B->>Q: 退还差额
-    else 真实 > 预扣
-        B->>Q: 补扣差额(可能透支,看策略)
-    end
-    Note over B: 上游失败时 Refund 全额退还
-```
-
-为什么要三阶段?
-
-- 单阶段"算完再扣"在并发下会**超扣**(很多请求同时通过额度检查)
-- 单阶段"先扣再用"会**多扣**(估算往往大于实际)
-- 三阶段在 Reserve 时就锁定额度,Settle 时按真实 usage 找平,Refund 兜底失败场景
-
-## 热更新
-
-所有路由配置都在数据库里,改完**不需要重启**:
-
-| 表 | 改了影响 |
-|---|---|
-| `ai.channel` | 通道开关 / 优先级 |
-| `ai.channel_account` | 上游 API key 轮换 |
-| `ai.routing_rule` | 模型 → 通道映射 |
-| `ai.routing_target` | endpoint 与上游能力点关联 |
-| `ai.model_config` | 模型名映射 |
-| `ai.channel_model_price` | 价格 |
-| `ai.token` | 用户 token / 限额 |
-| `ai.user_quota` | 用户配额 |
-
-`relay/src/service/channel_store.rs` 里有定时刷新机制(默认几十秒)。改完配置最多等一个刷新周期生效。
-
-## 完整请求追踪
-
-每条请求在 `ai.request_log` 表里有完整记录:
-
-| 字段 | 含义 |
-|---|---|
-| `request_id` | 整链路追踪 id(也走 `X-Request-Id` header) |
-| `flavor` | 入口协议(openai/claude/gemini) |
-| `endpoint` | chat_completions / messages / ... |
-| `client_model` | 客户端发的模型名 |
-| `upstream_model` | 实际打给上游的模型名 |
-| `channel_id` | 命中的 channel |
-| `prompt_tokens` / `completion_tokens` / `total_tokens` | 真实 usage |
-| `latency_ms` | 延迟 |
-| `status` | success / error / timeout |
-| `error_kind` / `error_detail` | 失败原因 |
-| `attempts` | 失败重试次数 |
-| `cost` | 真实费用(decimal) |
-
-OpenAPI 后台也提供 `/api/ai-admin/request-log` 接口检索。
-
-## OpenAI ChatGPT OAuth
-
-`relay/src/service/oauth/` 支持把官网 ChatGPT 账号通过 OAuth 接进来当上游:
-
-1. 用户在 AI 后台触发 OAuth 流程
-2. 拿到 OpenAI 的 access_token + refresh_token,落到 `ai.channel_account`
-3. 后台 job 自动续 refresh_token
-
-这样就能用个人订阅当 API 用,流量计入个人订阅额度。
-
-## 调用示例
-
-```bash
-# 创建一个 token(在 AI 后台 /api/ai-admin/token)
-TOKEN=sk-xxxxxx
-
-# OpenAI 风格
-curl -X POST http://localhost:8080/v1/chat/completions \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4o-mini",
-    "messages": [{"role":"user","content":"Hello"}],
-    "stream": false
-  }'
-
-# Claude 风格(同一个 token 即可)
-curl -X POST http://localhost:8080/v1/messages \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "anthropic-version: 2023-06-01" \
-  -d '{
-    "model": "claude-3-5-sonnet-latest",
-    "max_tokens": 1024,
-    "messages": [{"role":"user","content":"Hello"}]
-  }'
-
-# Gemini 风格
-curl -X POST "http://localhost:8080/v1beta/models/gemini-1.5-pro:generateContent?key=$TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "contents": [{"parts": [{"text": "Hello"}]}]
-  }'
-```
-
-## 与 MCP / Agent 的关系
+MCP 可以帮助开发 AI 管理模块,例如生成 Entity、CRUD、前端 bundle,再用 `menu_tool` 和 `dict_tool` 规划菜单/字典。relay 则负责线上模型调用链路、API Key、配额、路由、日志和流式响应。
 
 ```mermaid
 flowchart LR
-    A[summer-ai-relay] --> B[summer-ai-billing]
-    C[summer-ai-agent rig-core] --> A
-    C --> D[summer-mcp 工具]
+    A[AI 助手 / 开发工具] --> B[summer-mcp]
+    B --> C[数据库 schema / CRUD / 代码生成]
+    D[应用程序 / Agent] --> E[AI relay]
+    E --> F[OpenAI / Claude / Gemini / 自建模型]
+    G[Admin UI] --> H[/api/ai/* 管理接口]
+    H --> I[JWT / RBAC / 资源权限]
 ```
 
-- `summer-ai-relay` 是中转层(代理上游)
-- `summer-ai-agent` 是 Agent 层(用 rig-core 调中转 + MCP 工具)
-- `summer-mcp` 是工具层(给 AI 助手暴露数据库 / 业务能力)
+## 接入清单
 
-详见 [MCP](./mcp)。
+可以按这个顺序推进 AI 网关模块:
 
-## 参考源码
+1. 定义 AI 领域模型:渠道、模型、API Key、路由规则、请求日志、用量统计。
+2. 创建后台菜单和按钮权限,统一使用 `ai:*` 权限码。
+3. 接入管理接口,使用 `#[log]`、`#[has_perm]` 和资源权限绑定。
+4. 设计 API Key 鉴权链路,只保存 hash,创建后只展示一次明文。
+5. 实现模型路由,把客户端模型映射到真实上游渠道。
+6. 接入限流和配额,对 Key、租户、模型和 token 成本分别保护。
+7. 为流式响应建立专门 request log,记录最终状态和 usage。
+8. 使用 MCP 生成或校验 CRUD、菜单、字典和前端页面草稿。
 
-- 路由组装:`crates/summer-ai/relay/src/router/mod.rs`
-- 协议子路由:`crates/summer-ai/relay/src/router/{openai,claude,gemini}/`
-- 鉴权:`crates/summer-ai/relay/src/auth/`
-- 上游 channel:`crates/summer-ai/relay/src/service/channel_store.rs`
-- 流式驱动:`crates/summer-ai/relay/src/service/stream_driver.rs`
-- 模型映射:`crates/summer-ai/relay/src/service/model_service.rs`
-- 计费:`crates/summer-ai/billing/src/`
-- 后台 API:`crates/summer-ai/admin/src/router/`(15+ 个文件)
-- 设计文档:仓库根 `docs/relay/summer-ai/docs/{DESIGN,ROADMAP,MIGRATION}.md`
+这样可以让 AI 网关既融入后台管理体系,又保持 relay 协议入口的独立性。

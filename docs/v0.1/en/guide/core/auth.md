@@ -1,30 +1,67 @@
 ---
-title: Auth & Authorization
-description: JWT + bitmap RBAC + declarative macros.
+title: Authentication & Resource Permissions
+description: How JWT sessions, button permissions, public routes, and backend API resources work together.
 published_at: 2026-05-04 12:00:00
 ---
 
-# Auth & Authorization
+# Authentication & Resource Permissions
 
-> Full Chinese version (with macro reference): [`/guide/core/auth`](/guide/core/auth).
+Summerrs Admin authentication is built by `summer-auth` and `summer-system` together. `summer-auth` handles JWTs, sessions, and token validation; `summer-system` provides login, refresh, logout, online devices, menu permissions, and backend API resource permissions. The main app registers these related plugins:
+
+| Plugin | Purpose |
+|---|---|
+| `summer_auth::SummerAuthPlugin` | Reads `[auth]` config and registers `SessionManager` |
+| `summer_system::plugins::PermBitmapPlugin` | Loads the permission bitmap mapping from `sys.menu` |
+| `summer_system::plugins::ResourcePermissionPlugin` | Loads backend API resource policies from `sys.resource` and `sys.action_resource` |
+| `summer_plugins::LogBatchCollectorPlugin` | Provides async batched writes for `#[log]` |
+
+`crates/app/src/router.rs` mounts the `summer-system` route group under `/api`:
+
+```rust
+let api_router =
+    summer_system::router_with_layers(grouped.take_group(summer_system::system_group()));
+
+Router::new()
+    .nest("/api", api_router)
+    .merge(default_router)
+```
+
+`summer-system/src/router/mod.rs` then applies the authentication and resource-permission layers to the whole group:
+
+```rust
+pub fn router_with_layers(router: Router) -> Router {
+    let group = crate::system_group();
+
+    router
+        .layer(ResourcePermissionLayer::new())
+        .layer(AuthLayer::for_group(group))
+}
+```
+
+A system request flows through the layers in this order:
 
 ```mermaid
 flowchart LR
-    A[HTTP request] --> B[GroupAuthLayer]
-    B --> C[JwtStrategy]
-    C --> D[LoginUser extractor]
-    D --> E[Macros: #has_perm / #has_role]
-    E --> F[Service]
+    A[HTTP /api/*] --> B[AuthLayer]
+    B --> C[Parse Authorization Bearer token]
+    C --> D[Inject UserSession / LoginUser]
+    D --> E[ResourcePermissionLayer]
+    E --> F["handler macros: #[has_perm] / #[has_perms] / #[log]"]
+    F --> G[Service layer]
 ```
 
-## JWT config
+## JWT Config
+
+Both development and production environments configure auth through `[auth]`:
 
 ```toml
 [auth]
-access_timeout = 7200       # access token lifetime (seconds)
-refresh_timeout = 604800    # refresh token lifetime
+access_timeout = 7200
+refresh_timeout = 604800
 concurrent_login = true
 max_devices = 5
+per_request_deny_check = true
+is_read_cookie = false
 token_name = "Authorization"
 token_prefix = "Bearer "
 jwt_audience = "summer-admin"
@@ -33,121 +70,188 @@ jwt_algorithm = "HS256"
 jwt_secret = "${JWT_SECRET:change-me-in-local-dev}"
 ```
 
-Supported algorithms: **HS256 / RS256 / ES256 / EdDSA**. Production should prefer RS256 or EdDSA with key rotation.
+Supported JWT algorithms are defined in `summer-auth/src/config.rs`: `HS256`, `HS384`, `HS512`, `RS256`, `RS384`, `RS512`, `ES256`, `ES384`, and `EdDSA`.
 
-## Declarative macros
+HMAC algorithms use `jwt_secret`; asymmetric algorithms use `jwt_private_key` and `jwt_public_key` pointing to PEM files. Tokens are read from headers by default. When `is_read_cookie = true` is enabled, cookie reading is attempted as well; cookie mode should be paired with CSRF protection.
+
+## Login And Refresh
+
+The system login handler is in `summer-system/src/router/auth.rs`:
 
 ```rust
-use summer_admin_macros::{has_perm, has_perms, has_role, login, log, no_auth};
-
-#[login]
-#[get_api("/profile")]
-async fn get_profile(LoginUser { session, .. }: LoginUser) -> ApiResult<Json<ProfileVo>> { ... }
-
-#[has_perm("system:user:list")]
-#[get_api("/user/list")]
-async fn list_users(...) -> ApiResult<Json<...>> { ... }
-
-#[has_perms(and("system:user:list", "system:user:add"))]
-#[post_api("/user")]
-async fn create_user(...) -> ApiResult<()> { ... }
-
-#[has_perms(or("system:user:list", "system:role:list"))]
-#[get_api("/overview")]
-async fn overview(...) -> ApiResult<Json<...>> { ... }
-
-#[has_role("admin")]
-#[get_api("/admin/dashboard")]
-async fn dashboard(...) -> ApiResult<Json<...>> { ... }
-
 #[no_auth]
-#[get_api("/health")]
-async fn health() -> ApiResult<Json<&'static str>> { Ok(Json("ok")) }
+#[log(module = "认证管理", action = "管理员登录", biz_type = Auth, save_params = false)]
+#[post_api("/auth/login")]
+pub async fn login(...) -> ApiResult<Json<LoginVo>> { ... }
 ```
 
-Wildcards: `#[has_perm("system:*")]` matches any `system:foo:bar`.
+The actual request path is:
 
-## Bitmap RBAC
-
-`PermBitmapPlugin` loads `sys.menu` (which carries both the `perm` string and a `bit_position` column) into memory at startup, building a two-way `PermissionMap`:
-
-```text
-auth_mark ↔ bit_position:
-  "system:user:list"  ↔  0
-  "system:user:add"   ↔  1
-  ...
+```bash
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userName":"Admin","password":"123456"}'
 ```
 
-**On login**, the user's permission strings are encoded as a base64 bitmap and embedded in the JWT's `pb` claim — this is the key to keeping tokens short. 200+ permission codes shrink from a multi-KB string array to a few dozen base64 bytes.
+`LoginDto` uses `#[serde(rename_all = "camelCase")]`, so the fields are `userName` and `password`. The response `data` is:
 
-**On verification**, `validate_token` decodes `pb` back into a string list and runs `permission_matches` for **wildcard-aware exact matching** (`crates/summer-auth/src/session/manager.rs`):
-
-- Exact: `system:user:list` matches `system:user:list`
-- Super: `*` matches everything
-- Trailing wildcard: `system:*` matches `system:user:list`, `system:role:add`
-- Middle wildcard: `system:*:list` matches `system:user:list`, `system:role:list`
-- Segment count must match (unless ended in `*`)
-
-> There is no "pure bit-AND" step — wildcard semantics can't be expressed by bitmaps alone. **The bitmap exists to compress the token, not to speed up matching** (string matching itself runs in hundreds of nanoseconds).
-
-The source of truth for the bit positions is the `sys.menu.bit_position` column. Menus rarely change in production, so a startup-time full load works fine.
-
-## Sessions
-
-`crates/summer-auth/src/session/manager.rs` stores session state as **three independent string keys** in Redis, not a single aggregated hash:
-
-```text
-auth:device:{login_id}:{device}     → JSON { rid, login_time, login_ip, user_agent }
-auth:refresh:{rid}                  → plain string "login_id:device" (reverse index)
-auth:deny:{login_id}                → "banned" / "refresh:{ts}" (tri-state)
+```json
+{
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "eyJhbGciOi...",
+  "expiresIn": 7200
+}
 ```
 
-They are split because TTLs, lookup patterns, and lifecycles all differ. Detailed rationale: [the deep-dive blog post](/en/blog/auth-deep-dive).
+The login flow is:
 
-| Endpoint | Purpose |
-|---|---|
-| `POST /api/auth/login` | Login |
-| `POST /api/auth/logout` | Logout current device (writes deny=refresh:{ts}; other devices auto-refresh) |
-| `POST /api/auth/refresh` | Trade refresh token for a new pair (one-shot) |
-| `POST /api/auth/logout/all` | Logout all devices |
-| `GET /api/auth/sessions` | List own active devices |
-| `DELETE /api/auth/sessions/{device}` | Kick device |
+1. Load the user by `sys.user.user_name`.
+2. Check account status; disabled users are rejected.
+3. Verify the password with Argon2.
+4. Load role codes through `sys.user_role -> sys.role`.
+5. Load enabled Button permissions through `sys.role_menu -> sys.menu`, using `auth_mark` as the permission code.
+6. Call `SessionManager::login` to issue access and refresh tokens.
+7. Write the login log asynchronously.
 
-`max_devices = 5` triggers the **earliest-logged-in device** (by `login_time`) to be evicted when a 6th login happens — not the least recently active.
-
-## Force-out and refresh rotation
-
-`summerrs-admin` has **no "token blocklist"**. A single key, `auth:deny:{login_id}`, carries three meanings:
-
-| Trigger | Deny value | Effect |
-|---|---|---|
-| `ban_user(login_id)` | `"banned"` (TTL 365 days) | Every request *and* refresh rejected until `unban_user` clears it |
-| `force_refresh(login_id)` after role change | `"refresh:{ts}"` (TTL = access_timeout) | **Only blocks tokens with iat ≤ ts**; new tokens pass automatically |
-| `logout(login_id, device)` | delete device key + write `"refresh:{ts}"` | Target device exits; other devices' old tokens get RefreshRequired and auto-refresh **without disconnect** |
-
-That's why the blog calls the deny key "a rotation trigger, not a blocker."
+The refresh endpoint is public:
 
 ```rust
-#[delete_api("/auth/sessions/{device}")]
-pub async fn kick_session(
-    LoginUser { session, .. }: LoginUser,
-    Component(svc): Component<AuthService>,
-    Path(device): Path<String>,
-) -> ApiResult<()> {
-    let device_type = DeviceType::from(device.as_str());
-    svc.kick_device(&session.login_id, device_type).await?;
+#[no_auth]
+#[post_api("/auth/refresh")]
+pub async fn refresh_token(...) -> ApiResult<Json<LoginVo>> { ... }
+```
+
+Refresh first parses the refresh JWT to get the user ID, reloads the latest roles and permissions from the database, then validates the Redis refresh key and rotates a new refresh token.
+
+## Access And Refresh Responsibilities
+
+The access JWT is self-contained. `AccessClaims` in `summer-auth/src/token/jwt.rs` includes:
+
+| Field | Meaning |
+|---|---|
+| `sub` | Encoded login user ID |
+| `typ` | `access` |
+| `iat` / `exp` | Issued-at and expiry timestamps |
+| `dev` | Device type |
+| `user_name` / `nick_name` | User display fields |
+| `roles` | Role code list |
+| `permissions` | Permission code list, used when no bitmap is available |
+| `pb` | Base64 permission bitmap, used when a `PermissionMap` is available |
+
+The refresh JWT only stores `sub`, `typ`, `iat`, `exp`, and `rid`. The `rid` maps to Redis key `auth:refresh:{rid}`.
+
+Redis session keys are mainly:
+
+| Key | Content |
+|---|---|
+| `auth:device:{login_id}:{device}` | Device-session JSON, including refresh `rid`, login time, IP, and User-Agent |
+| `auth:refresh:{rid}` | `login_id:device`, used for refresh-token rotation validation |
+| `auth:deny:{login_id}` | `banned` or `refresh:{timestamp}` |
+
+When `max_devices = 5`, the 6th login removes the earliest logged-in device. When `concurrent_login = false`, a new login clears all existing devices for that user.
+
+## Public Routes
+
+`#[public]` and `#[no_auth]` register public routes at compile time through `inventory`. When `AuthLayer::for_group(group)` starts, it merges public routes from the same group into `PathAuthConfig.exclude`.
+
+System public endpoints include:
+
+| Path | Source |
+|---|---|
+| `POST /api/auth/login` | `#[no_auth]` |
+| `POST /api/auth/refresh` | `#[no_auth]` |
+| `GET /api/public/file/{token}` | `#[public]` |
+
+Other `summer-system` endpoints require login by default.
+
+If a route macro cannot infer the public path automatically, specify it explicitly:
+
+```rust
+#[public(GET, "/health")]
+#[get_api("/health")]
+async fn health() -> ApiResult<()> {
     Ok(())
 }
 ```
 
-`kick_device(Some(device))` calls `logout(login_id, device)` internally — kicking your own device and that device logging itself out have identical side effects: target device exits, all others go through one refresh cycle.
+## Handler Permission Macros
 
-`concurrent_login = false` clears **every** existing device for the same user at login, so each user has exactly one active device at a time.
+Most management handlers use declarative permission macros:
 
-## Source files
+```rust
+#[has_perm("system:user:create")]
+#[post_api("/user")]
+pub async fn create_user(...) -> ApiResult<()> { ... }
 
-- `crates/summer-auth/src/lib.rs`
-- `crates/summer-auth/src/middleware.rs`
-- `crates/summer-auth/src/path_auth.rs`
-- `crates/summer-auth/src/bitmap.rs`
-- `crates/summer-admin-macros/src/auth_macro.rs`
+#[has_perms(or("system:role:list", "system:user:create", "system:user:update"))]
+#[get_api("/role/list")]
+pub async fn list_roles(...) -> ApiResult<Json<Page<RoleVo>>> { ... }
+```
+
+Permission codes come from `auth_mark` on enabled `sys.menu` rows with `menu_type = Button`. `permission_matches` supports:
+
+| Held permission | Matches |
+|---|---|
+| `system:user:list` | Exact same permission |
+| `*` | Any permission |
+| `system:*` | Everything under `system:` |
+| `system:*:list` | Middle-segment wildcard |
+
+`PermBitmapPlugin` loads `PermissionMap` from `sys.menu.bit_position` on startup. When a mapping exists, login compresses the permission list into the JWT `pb` field; when the mapping is missing, the JWT stores the `permissions` array. The bitmap mainly reduces token size. Wildcard matching still runs on decoded permission strings.
+
+## Backend API Resource Permissions
+
+In addition to handler-level `#[has_perm]`, the system provides a backend API resource-permission layer:
+
+| Table | Purpose |
+|---|---|
+| `sys.resource` | Registers backend API resources, including method, path, and enabled status |
+| `sys.action_resource` | Binds resources to Button menu `sys.menu.id` |
+| `sys.menu` | The Button `auth_mark` is the final action permission |
+
+`ResourcePermissionPlugin` loads enabled `sys.resource` rows on startup, queries their bound Button permissions, and builds an in-memory policy. `SysResourceService` calls `reload_policy()` after resource creation, update, enable/disable, deletion, or binding changes.
+
+The resource layer intentionally uses pragmatic rules:
+
+- If no login session has been injected yet, it skips and lets `AuthLayer` or public-route handling decide.
+- If a registered resource has bound action permissions, the user may pass with any one bound permission.
+- If a registered resource has not yet been bound to action permissions, it is temporarily allowed so resources can be entered gradually.
+- Unregistered resources are allowed by default for compatibility with older endpoints.
+
+In production, maintain both sides: handler `#[has_perm]` should not be omitted casually, and `sys.resource` bindings should be filled in over time.
+
+## Devices And Force-Out APIs
+
+Auth routes also provide device management:
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/auth/logout` | Logout this device |
+| `POST` | `/api/auth/logout/all` | Logout all devices |
+| `GET` | `/api/auth/sessions` | List this user's online devices |
+| `DELETE` | `/api/auth/sessions/{device}` | Kick one of this user's devices |
+
+`online.rs` provides the admin view of online users:
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/api/online/list` | `system:online:list` |
+| `DELETE` | `/api/online/{login_id}` | `system:online:kick` |
+| `DELETE` | `/api/online/{login_id}/{device}` | `system:online:kick` |
+
+Logout, device kick, and role/permission changes all use `auth:deny:{login_id}` to trigger old access tokens to refresh. `deny = "refresh:{ts}"` means old tokens with `iat <= ts` must refresh; `deny = "banned"` means the account is banned and both access and refresh are rejected.
+
+## Operation Logs
+
+System routes use `#[log]` heavily:
+
+```rust
+#[log(module = "用户管理", action = "创建用户", biz_type = Create)]
+#[has_perm("system:user:create")]
+#[post_api("/user")]
+pub async fn create_user(...) -> ApiResult<()> { ... }
+```
+
+`#[log]` injects `OperationLogContext` and captures method, URL, query, User-Agent, client IP, the user from the login session, and duration. Logs are not written synchronously on the main request path. They are pushed to `OperationLogCollector`, then batched into `sys.operation_log` by `LogBatchCollectorPlugin`.
+
+Sensitive endpoints should explicitly disable parameter or response logging. Login and password reset, for example, use `save_params = false`.

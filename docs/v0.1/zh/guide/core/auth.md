@@ -1,287 +1,257 @@
 ---
-title: 认证与授权
-description: JWT + 位图 RBAC + 声明式宏的完整链路。
+title: 认证与资源权限
+description: 介绍 JWT 会话、按钮权限、公开路由与后端 API 资源绑定的完整链路。
 published_at: 2026-05-04 12:00:00
 ---
 
-# 认证与授权
+# 认证与资源权限
 
-Summerrs Admin 的鉴权是分层设计的:
+Summerrs Admin 的认证体系由 `summer-auth` 和 `summer-system` 共同完成。`summer-auth` 负责 JWT、会话和令牌校验,`summer-system` 提供登录、刷新、登出、在线设备、菜单权限和后端 API 资源权限。主应用启动时会注册这些相关插件:
+
+| 插件 | 作用 |
+|---|---|
+| `summer_auth::SummerAuthPlugin` | 读取 `[auth]` 配置, 注册 `SessionManager` |
+| `summer_system::plugins::PermBitmapPlugin` | 从 `sys.menu` 加载权限位图映射 |
+| `summer_system::plugins::ResourcePermissionPlugin` | 从 `sys.resource` 和 `sys.action_resource` 加载后端 API 资源权限策略 |
+| `summer_plugins::LogBatchCollectorPlugin` | 为 `#[log]` 提供异步批量写日志能力 |
+
+`crates/app/src/router.rs` 会把 `summer-system` 这一组路由挂到 `/api`:
+
+```rust
+let api_router =
+    summer_system::router_with_layers(grouped.take_group(summer_system::system_group()));
+
+Router::new()
+    .nest("/api", api_router)
+    .merge(default_router)
+```
+
+`summer-system/src/router/mod.rs` 再给整组接口挂上认证层和资源权限层:
+
+```rust
+pub fn router_with_layers(router: Router) -> Router {
+    let group = crate::system_group();
+
+    router
+        .layer(ResourcePermissionLayer::new())
+        .layer(AuthLayer::for_group(group))
+}
+```
+
+请求进入系统接口时,顺序可以理解为:
 
 ```mermaid
 flowchart LR
-    A[HTTP 请求] --> B[GroupAuthLayer]
-    B --> C[JwtStrategy 解析 + 校验]
-    C --> D[LoginUser extractor 注入]
-    D --> E["声明式宏: #[has_perm] / #[has_role]"]
-    E --> F[Service 层]
+    A[HTTP /api/*] --> B[AuthLayer]
+    B --> C[解析 Authorization Bearer token]
+    C --> D[注入 UserSession / LoginUser]
+    D --> E[ResourcePermissionLayer]
+    E --> F["handler 宏: #[has_perm] / #[has_perms] / #[log]"]
+    F --> G[Service 层]
 ```
-
-涉及 crate:
-
-- `crates/summer-auth` —— JWT、会话、设备并发、路径策略
-- `crates/summer-system::plugins::PermBitmapPlugin` —— 权限位图
-- `crates/summer-admin-macros` —— `#[login]` `#[has_perm]` `#[has_role]` 等编译期宏
 
 ## JWT 配置
 
-`config/app.toml`:
+开发和生产环境都可以通过 `[auth]` 配置认证参数:
 
 ```toml
 [auth]
-access_timeout = 7200       # access token 秒数,默认 2 小时
-refresh_timeout = 604800    # refresh token 秒数,默认 7 天
-concurrent_login = true     # 是否允许多设备并发登录
-max_devices = 5             # 单用户最大并发设备数
-is_read_cookie = false      # 是否同时从 cookie 读 token
+access_timeout = 7200
+refresh_timeout = 604800
+concurrent_login = true
+max_devices = 5
+per_request_deny_check = true
+is_read_cookie = false
 token_name = "Authorization"
 token_prefix = "Bearer "
 jwt_audience = "summer-admin"
 jwt_issuer = "summer-admin"
-
-# 默认 HS256
 jwt_algorithm = "HS256"
 jwt_secret = "${JWT_SECRET:change-me-in-local-dev}"
-
-# 想用非对称算法把 HS256 段注释掉,改成
-# jwt_algorithm = "RS256"
-# jwt_private_key = "./data/rsa_private.pem"
-# jwt_public_key = "./data/rsa_public.pem"
 ```
 
-支持算法:**HS256 / RS256 / ES256 / EdDSA**(由 `jsonwebtoken` 0.10 提供)。生产建议用 RS256 或 EdDSA + 密钥轮转。
+支持的 JWT 算法来自 `summer-auth/src/config.rs`: `HS256`、`HS384`、`HS512`、`RS256`、`RS384`、`RS512`、`ES256`、`ES384`、`EdDSA`。
 
-## 登录流程
+HMAC 系列使用 `jwt_secret`; 非对称算法使用 `jwt_private_key` 和 `jwt_public_key` 指向 PEM 文件。默认从 Header 取 token。开启 `is_read_cookie = true` 后会尝试读 Cookie,Cookie 模式建议配合 CSRF 防护一起启用。
 
-`crates/summer-system/src/router/auth.rs`:
+## 登录与刷新
+
+系统登录接口在 `summer-system/src/router/auth.rs`:
 
 ```rust
 #[no_auth]
 #[log(module = "认证管理", action = "管理员登录", biz_type = Auth, save_params = false)]
 #[post_api("/auth/login")]
-pub async fn login(
-    Component(svc): Component<AuthService>,
-    ClientIp(client_ip): ClientIp,
-    headers: HeaderMap,
-    ValidatedJson(dto): ValidatedJson<LoginDto>,
-) -> ApiResult<Json<LoginVo>> {
-    let ua_info = UserAgentInfo::from_headers(&headers);
-    let vo = svc.login(dto, client_ip, ua_info).await?;
-    Ok(Json(vo))
-}
+pub async fn login(...) -> ApiResult<Json<LoginVo>> { ... }
 ```
 
-请求:
+实际访问路径是:
 
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"Admin","password":"123456"}'
+  -d '{"userName":"Admin","password":"123456"}'
 ```
 
-返回 `LoginVo`:
+`LoginDto` 使用 `#[serde(rename_all = "camelCase")]`,所以字段是 `userName` 和 `password`。返回体中的 `data` 是:
 
 ```json
 {
-  "code": 200,
-  "data": {
-    "access_token": "eyJhbGciOi...",
-    "refresh_token": "eyJhbGciOi...",
-    "token_type": "Bearer",
-    "expires_in": 7200,
-    "user_info": { ... }
-  }
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "eyJhbGciOi...",
+  "expiresIn": 7200
 }
 ```
 
-## 受保护接口怎么写
+登录流程如下:
 
-声明式宏全部在 `crates/summer-admin-macros/src/lib.rs`,典型组合:
+1. 根据 `sys.user.user_name` 查询用户。
+2. 检查账号状态,禁用用户直接拒绝。
+3. 用 Argon2 校验密码。
+4. 通过 `sys.user_role -> sys.role` 读取角色编码。
+5. 通过 `sys.role_menu -> sys.menu` 读取启用的 Button 权限,取 `auth_mark` 作为权限码。
+6. 调用 `SessionManager::login` 签发 access/refresh token。
+7. 异步写入登录日志。
+
+刷新接口是公开接口:
 
 ```rust
-use summer_admin_macros::{has_perm, log, login};
-use summer_auth::LoginUser;
-use summer_common::{error::ApiResult, response::Json};
-use summer_web::{get_api, post_api};
-
-#[get_api("/profile")]
-async fn get_profile(LoginUser { session, .. }: LoginUser) -> ApiResult<Json<ProfileVo>> {
-    Ok(Json(load_profile(&session.login_id).await?))
-}
-
-// 单权限校验
-#[has_perm("system:user:list")]
-#[get_api("/user/list")]
-async fn list_users(...) -> ApiResult<Json<...>> { ... }
-
-// 多权限 AND
-#[has_perms(and("system:user:list", "system:user:add"))]
-#[post_api("/user")]
-async fn create_user(...) -> ApiResult<()> { ... }
-
-// 多权限 OR
-#[has_perms(or("system:user:list", "system:role:list"))]
-#[get_api("/overview")]
-async fn overview(...) -> ApiResult<Json<...>> { ... }
-
-// 单角色
-#[has_role("admin")]
-#[get_api("/admin/dashboard")]
-async fn dashboard(...) -> ApiResult<Json<...>> { ... }
-
-// 多角色 OR
-#[has_roles(or("admin", "moderator"))]
-#[delete_api("/post/{id}")]
-async fn delete_post(...) -> ApiResult<()> { ... }
-
-// 公共接口(免鉴权,会写到 PathAuthConfig.exclude)
 #[no_auth]
-#[get_api("/health")]
-async fn health() -> ApiResult<Json<&'static str>> { Ok(Json("ok")) }
+#[post_api("/auth/refresh")]
+pub async fn refresh_token(...) -> ApiResult<Json<LoginVo>> { ... }
 ```
 
-## 通配符权限
+刷新时会先解析 refresh JWT 拿到用户 ID,再从数据库加载最新角色和权限,最后校验 Redis 中的 refresh key 并轮转新的 refresh token。
 
-`#[has_perm]` 支持 `*` 通配符:
+## Access 与 Refresh 的职责
 
-```rust
-#[has_perm("system:*")]   // 匹配 system:user:list / system:role:add ...
-#[has_perm("ai:relay:*")] // 匹配 AI 网关下所有权限
-```
+Access JWT 是自包含的。`summer-auth/src/token/jwt.rs` 的 `AccessClaims` 包含:
 
-`admin` 角色默认有 `*`,可以匹配任意权限。
-
-## 位图 RBAC
-
-`PermBitmapPlugin` 在启动时把数据库里的 `sys.menu`(包含 `perm` 字段和 `bit_position` 列)加载进内存,构造一张双向映射 `PermissionMap`:
-
-```text
-auth_mark ↔ bit_position:
-  "system:user:list"  ↔  0
-  "system:user:add"   ↔  1
-  ...
-```
-
-**登录时**,用户的权限码被编码成 base64 bitmap,塞进 JWT 载荷的 `pb` 字段 —— 这是压缩 token 体积的关键。200+ 权限码从几 KB 字符串数组压到几十字节的 base64。
-
-**验证时**,`validate_token` 从 `pb` decode 回字符串数组,再过 `permission_matches` 做**支持通配符的精确匹配**(`crates/summer-auth/src/session/manager.rs`):
-
-- 精确:`system:user:list` 匹配 `system:user:list`
-- 超级:`*` 匹配任何权限
-- 末尾通配:`system:*` 匹配 `system:user:list`、`system:role:add`
-- 中间通配:`system:*:list` 匹配 `system:user:list`、`system:role:list`
-- 段数不匹配时不通配
-
-> 没有"纯位运算做匹配"这一步 —— 通配符语义靠纯位图是表达不了的。**bitmap 的价值在于 token 压缩,不在于检查速度**(字符串匹配本身也就几百纳秒)。
-
-数据库里的 `sys.menu.bit_position` 字段就是这张表的 source of truth。菜单在生产环境很少改,启动期全量加载即可。
-
-## 会话与设备管理
-
-`crates/summer-auth/src/session/manager.rs` 把会话状态拆成**三种独立 string key** 存到 Redis,而不是一个聚合的 hash:
-
-```text
-auth:device:{login_id}:{device}     → JSON { rid, login_time, login_ip, user_agent }
-auth:refresh:{rid}                  → 简单字符串 "login_id:device"(反向索引)
-auth:deny:{login_id}                → "banned" / "refresh:{ts}"(三态共用)
-```
-
-之所以拆三份,是因为它们 TTL 不一样、查询模式不一样、生命周期也不一样 —— 详见 [博客深挖文章](/blog/auth-deep-dive)。
-
-接口:
-
-| 路径 | 作用 |
+| 字段 | 含义 |
 |---|---|
-| `POST /api/auth/login` | 登录 |
-| `POST /api/auth/logout` | 登出当前设备(写 deny=refresh:{ts},触发其他设备无感刷新) |
-| `POST /api/auth/refresh` | 用 refresh token 换新的 access token(用过即焚) |
-| `POST /api/auth/logout/all` | 登出所有设备 |
-| `GET /api/auth/sessions` | 查看自己的全部在线设备 |
-| `DELETE /api/auth/sessions/{device}` | 把指定设备踢下线 |
+| `sub` | 编码后的登录用户 ID |
+| `typ` | `access` |
+| `iat` / `exp` | 签发与过期时间 |
+| `dev` | 设备类型 |
+| `user_name` / `nick_name` | 用户展示信息 |
+| `roles` | 角色编码列表 |
+| `permissions` | 权限码列表,无位图时使用 |
+| `pb` | base64 权限位图,有 `PermissionMap` 时使用 |
 
-`max_devices = 5` 起作用:第 6 个设备登录会自动踢掉**最早登录的设备**(按 `login_time` 排序),不是最近一次活跃。
+Refresh JWT 只保存 `sub`、`typ`、`iat`、`exp` 和 `rid`。`rid` 对应 Redis 中的 `auth:refresh:{rid}`。
 
-## 路径策略 PathAuthConfig
+Redis 会话 key 主要有三类:
 
-`#[no_auth]` 会在编译期把"method + path"塞进 `PathAuthConfig.exclude` 列表,中间件遇到这些路径直接跳过 JWT 校验。常见免鉴权路径:
+| Key | 内容 |
+|---|---|
+| `auth:device:{login_id}:{device}` | 设备会话 JSON,包含 refresh `rid`、登录时间、IP、User-Agent |
+| `auth:refresh:{rid}` | `login_id:device`,用于 refresh token 轮转校验 |
+| `auth:deny:{login_id}` | `banned` 或 `refresh:{timestamp}` |
 
-- `POST /api/auth/login`
-- `POST /api/auth/refresh`
-- `GET /docs`(OpenAPI)
-- `GET /api/captcha/*`(验证码)
-- `GET /api/public-file/*`(公开下载)
+`max_devices = 5` 时,第 6 个设备登录会清掉最早登录的设备。`concurrent_login = false` 时,新登录会清掉该用户所有旧设备。
 
-如果路由宏推不出 path,可以手动指定:
+## 公开路由
+
+`#[public]` 和 `#[no_auth]` 会在编译期通过 `inventory` 注册公开路由。`AuthLayer::for_group(group)` 启动时会把同一 group 下的公开路由合并到 `PathAuthConfig.exclude`。
+
+系统公开接口包括:
+
+| 路径 | 来源 |
+|---|---|
+| `POST /api/auth/login` | `#[no_auth]` |
+| `POST /api/auth/refresh` | `#[no_auth]` |
+| `GET /api/public/file/{token}` | `#[public]` |
+
+其他 `summer-system` 接口默认都需要登录。
+
+如果路由宏无法自动推导公开路径,可以显式写:
 
 ```rust
 #[public(GET, "/health")]
-async fn health() -> ApiResult<()> { Ok(()) }
-
-// no_auth 是 public 的别名
-#[no_auth]
-#[get_api("/version")]
-async fn version() -> ApiResult<&'static str> { Ok("v0.0.1") }
-```
-
-## 强制下线与刷新流转
-
-`summerrs-admin` **没有"token 黑名单"机制**,而是用 `auth:deny:{login_id}` 一个 key 承载三种语义:
-
-| 触发点 | deny 值 | 效果 |
-|---|---|---|
-| `ban_user(login_id)` | `"banned"` (TTL 365 天) | 该用户所有请求 + refresh 全部拒绝,直到 `unban_user` 显式解除 |
-| `force_refresh(login_id)` 角色变更时调 | `"refresh:{ts}"` (TTL = access_timeout) | **只拦 iat ≤ ts 的旧 token**,新 token 自动放行 |
-| `logout(login_id, device)` | 删 device key + 写 `"refresh:{ts}"` | 目标设备退出;其他设备的旧 token 触发 RefreshRequired,**前端自动刷新不掉线** |
-
-这就是为什么博客里说"deny 不是拦截器,是流转触发器"。具体代码:
-
-```rust
-#[delete_api("/auth/sessions/{device}")]
-pub async fn kick_session(
-    LoginUser { session, .. }: LoginUser,
-    Component(svc): Component<AuthService>,
-    Path(device): Path<String>,
-) -> ApiResult<()> {
-    let device_type = DeviceType::from(device.as_str());
-    svc.kick_device(&session.login_id, device_type).await?;
+#[get_api("/health")]
+async fn health() -> ApiResult<()> {
     Ok(())
 }
 ```
 
-`kick_device(Some(device))` 内部调 `logout(login_id, device)` —— 所以**踢自己的某个设备**和**该设备自己 logout**,副作用一样:目标设备退出,其他设备走一次刷新换新 token。
+## Handler 权限宏
 
-`concurrent_login = false` 会在登录时清除**所有**同用户的已有设备,单用户同一时刻只能在一个设备活跃。
-
-## 操作日志 `#[log]`
+多数管理接口在 handler 上使用声明式权限宏:
 
 ```rust
-#[log(
-    module = "用户管理",
-    action = "创建用户",
-    biz_type = Create,
-    save_params = true,      // 是否记录请求参数,敏感接口设 false
-    save_response = true     // 是否记录响应
-)]
+#[has_perm("system:user:create")]
 #[post_api("/user")]
-async fn create_user(...) -> ApiResult<()> { ... }
+pub async fn create_user(...) -> ApiResult<()> { ... }
+
+#[has_perms(or("system:role:list", "system:user:create", "system:user:update"))]
+#[get_api("/role/list")]
+pub async fn list_roles(...) -> ApiResult<Json<Page<RoleVo>>> { ... }
 ```
 
-`#[log]` 把记录扔进 `LogBatchCollectorPlugin` 的 channel,后台 worker 批量写 `sys.operation_log`,不阻塞主请求。详见 [限流与日志](./rate-limit) 末尾的"日志批量"段。
+权限码来自 `sys.menu` 中 `menu_type = Button` 且 `enabled = true` 的 `auth_mark`。`permission_matches` 支持这些匹配:
 
-## 错误返回
+| 持有权限 | 可匹配 |
+|---|---|
+| `system:user:list` | 精确匹配同名权限 |
+| `*` | 任意权限 |
+| `system:*` | `system:` 下所有权限 |
+| `system:*:list` | 中间段通配 |
 
-| 场景 | HTTP 状态 | 错误体 |
+`PermBitmapPlugin` 启动时从 `sys.menu.bit_position` 加载 `PermissionMap`。映射存在时,登录会把权限列表压缩为 JWT 的 `pb` 字段;映射缺省时,JWT 会保存 `permissions` 数组。位图的价值主要是压缩 token 体积,通配符匹配仍在解码后的权限字符串上完成。
+
+## 后端 API 资源权限
+
+除了 handler 上的 `#[has_perm]`,系统还提供一层后端 API 资源权限:
+
+| 表 | 作用 |
+|---|---|
+| `sys.resource` | 登记后端 API 资源,包含 method、path、enabled |
+| `sys.action_resource` | 把资源绑定到按钮菜单 `sys.menu.id` |
+| `sys.menu` | Button 菜单的 `auth_mark` 是最终动作权限 |
+
+`ResourcePermissionPlugin` 启动时加载启用的 `sys.resource`,再查它们绑定的按钮权限,生成内存策略。`SysResourceService` 在创建、更新、启停、删除资源或保存绑定后都会调用 `reload_policy()` 热更新策略。
+
+资源权限层的判定规则很务实:
+
+- 请求尚未注入登录会话时跳过,交给 AuthLayer 或公开路由处理。
+- 匹配到已登记资源且绑定了动作权限时,用户只要拥有任意一个绑定权限即可通过。
+- 匹配到已登记资源但尚未绑定动作权限时,暂时放行,方便灰度录入资源。
+- 未登记资源默认放行,用于兼容旧接口。
+
+因此,生产环境要同时维护两件事: handler 上的 `#[has_perm]` 不能随意缺失,`sys.resource` 与按钮绑定也要逐步补齐。
+
+## 设备与强制下线接口
+
+认证路由还提供设备管理:
+
+| 方法 | 路径 | 说明 |
 |---|---|---|
-| 没带 token | 401 | `{ code: 401, message: "..." }` |
-| token 过期 | 401 | 同上 |
-| 权限不足 | 403 | `{ code: 403, message: "..." }` |
-| 限流 | 429 | `{ code: 429, message: "请求过于频繁" }` |
-| panic | 500 | RFC 7807 ProblemDetails |
+| `POST` | `/api/auth/logout` | 登出本设备 |
+| `POST` | `/api/auth/logout/all` | 登出所有设备 |
+| `GET` | `/api/auth/sessions` | 查看本用户在线设备 |
+| `DELETE` | `/api/auth/sessions/{device}` | 踢下本用户某个设备 |
 
-## 进一步阅读
+`online.rs` 提供管理员视角的在线用户管理:
 
-- 源码:`crates/summer-auth/src/lib.rs`
-- 中间件实现:`crates/summer-auth/src/middleware.rs`
-- 路径策略:`crates/summer-auth/src/path_auth.rs`, `public_routes.rs`
-- 位图实现:`crates/summer-auth/src/bitmap.rs`
-- 宏展开:`crates/summer-admin-macros/src/auth_macro.rs`
+| 方法 | 路径 | 权限 |
+|---|---|---|
+| `GET` | `/api/online/list` | `system:online:list` |
+| `DELETE` | `/api/online/{login_id}` | `system:online:kick` |
+| `DELETE` | `/api/online/{login_id}/{device}` | `system:online:kick` |
+
+登出、踢设备和角色权限变更都通过 `auth:deny:{login_id}` 触发旧 access token 刷新。`deny = "refresh:{ts}"` 表示 `iat <= ts` 的旧 token 需要刷新;`deny = "banned"` 表示账号被封禁,access 和 refresh 都拒绝。
+
+## 操作日志
+
+系统路由大量使用 `#[log]`:
+
+```rust
+#[log(module = "用户管理", action = "创建用户", biz_type = Create)]
+#[has_perm("system:user:create")]
+#[post_api("/user")]
+pub async fn create_user(...) -> ApiResult<()> { ... }
+```
+
+`#[log]` 会注入 `OperationLogContext`,捕获 method、URL、query、User-Agent、客户端 IP、登录会话中的用户和耗时。日志不会在请求主链路同步写库,而是推到 `OperationLogCollector`,由 `LogBatchCollectorPlugin` 批量写入 `sys.operation_log`。
+
+敏感接口应该显式关闭参数或响应记录,例如登录和重置密码使用 `save_params = false`。

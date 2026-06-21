@@ -80,18 +80,18 @@ docker compose ps
 
 应用监听 `8080`,RustFS 控制台监听 `9001`(默认账号 `summerAK / summerSK`)。
 
-> 💡 **提示**: 数据库会在应用首次启动时自动初始化,无需手动执行 SQL。
+> **提示**: 数据库会在应用首次启动时自动初始化,无需手动执行 SQL。
 
 ### 4. 验证
 
 ```bash
 # OpenAPI 文档
-curl http://localhost:8080/docs
+curl http://localhost:8080/docs/openapi.json
 
 # 登录测试(默认账号 Admin / 123456)
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"Admin","password":"123456"}'
+  -d '{"userName":"Admin","password":"123456"}'
 ```
 
 ### 自定义端口
@@ -154,7 +154,7 @@ XXL_JOB_ADMIN_ADDRESSES=http://127.0.0.1:8725/xxl-job-admin
 XXL_JOB_ACCESS_TOKEN=default_token
 ```
 
-> ⚠️ **安全提示**:`.env` 已在 `.gitignore` 中,不要把生产密钥提交到仓库。
+> **安全提示**:`.env` 已在 `.gitignore` 中,不要把生产密钥提交到仓库。
 
 ### 4. 运行项目
 
@@ -163,4 +163,4 @@ XXL_JOB_ACCESS_TOKEN=default_token
 cargo run --bin app
 ```
 
-项目会在首次启动时自动完成数据库初始化。启动后访问 `http://localhost:8080` 即可。
+项目会在首次启动时自动完成数据库初始化。启动后访问 `http://localhost:8080/docs/openapi.json` 即可。

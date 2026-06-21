@@ -646,7 +646,7 @@ pub async fn logout(&self, login_id: &LoginId, device: &DeviceType) -> AuthResul
 诚实地讲,v5 也不是终点。**仍然存在**的问题:
 
 - **长 Token 被盗后的 1-2 小时** —— 即使我能在刷新时阻止恶意刷新,但攻击者只要 1 次成功的刷新就能延续会话。需要绑定设备指纹 / IP 段(成本高、误伤多)。
-- **管理员"批量改权限"** —— 一次性给 1 万用户改角色,要写 1 万条 deny 记录吗?可能需要"全局 deny 时间戳"的版本,但那又会触发所有人刷新,数据库扛不扛得住?
+- **角色权限变更的传播粒度** —— 日常更常见的是管理员调整某个角色绑定的菜单或按钮,然后影响一批已登录用户,而不是逐个改用户角色。`auth:deny:{login_id}` 适合精准刷新某个用户;如果要让"角色一改,持有该角色的在线用户都尽快感知",更合适的是引入 `role_version` / `permission_version` 这类版本号,让 access token 携带签发时的版本,请求时按需校验。对实时性要求不高的后台,也可以只依赖短 access token 自然过期。
 - **多租户隔离** —— 当前 deny key 是 `auth:deny:{login_id}`,租户不参与构造。在多租户深度隔离场景下,租户的 deny 应该挂在租户上下文里。
 - **Passkey / WebAuthn** —— 表已经在 schema 里(`sys.passkey_credential`),但接入流没写。
 
@@ -670,7 +670,7 @@ pub async fn logout(&self, login_id: &LoginId, device: &DeviceType) -> AuthResul
 ## 进一步阅读
 
 - 上手教程:[认证与授权](/guide/core/auth)
-- 整体架构:[整体架构](/guide/architecture/overview)
+- 整体架构:[项目目录结构](/guide/architecture/directory)
 - 源码入口:`crates/summer-auth/src/lib.rs`
 - 关键文件:
   - `crates/summer-auth/src/middleware.rs` —— 中间件层

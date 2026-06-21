@@ -71,7 +71,6 @@ summerrs-admin/
 |---|---|
 | **summer-mcp** | MCP Server (schema discovery, table CRUD, code generation, menu/dict tools) |
 | **summer-migration** | Database migrations (SeaORM migration) |
-| **summer-codegen** | Code generation utilities |
 
 ## Key Files
 
@@ -151,7 +150,6 @@ cargo run --bin app
 
 ## Next Steps
 
-- [Plugin Overview](./plugins) - All plugins and their configurations
 - [Authentication](../core/auth) - JWT and permission system
 - [Multi-tenancy](../core/multi-tenancy) - Tenant isolation
 - [MCP](../core/mcp) - Model Context Protocol integration

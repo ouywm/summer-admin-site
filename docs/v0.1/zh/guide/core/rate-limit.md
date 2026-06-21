@@ -1,133 +1,175 @@
 ---
 title: 限流与日志
-description: 五种限流算法、GCRA 内核、声明式 #[rate_limit]、操作日志的批量写入。
+description: 声明式限流、标准响应头、操作日志与批量写入。
 published_at: 2026-05-04 12:40:00
 ---
 
 # 限流与日志
 
-声明式宏 `#[rate_limit]` 是 Summerrs Admin 的核心运行时保护。它支持五种算法,内存与 Redis 双后端。底层基于 **GCRA**(Generic Cell Rate Algorithm)——Cloudflare / Stripe / Envoy 都在用的工业标准。
+限流用于保护高频接口,避免单个用户、IP 或调用方在短时间内打满服务资源。日志用于记录管理后台里的关键操作,让登录、增删改、资源访问、异常和耗时都有迹可查。
 
-## 算法清单
+Summerrs Admin 提供两类能力:
 
-| `algorithm` | 内核 | 适合 |
-|---|---|---|
-| `token_bucket`(默认) | GCRA,burst 默认等于 rate | 普通限流,**最常用** |
-| `gcra` | 显式 GCRA,自定 burst | 精确控制突发 |
-| `leaky_bucket` | 严格按 1/rate 间隔放行 | 想要绝对均匀 |
-| `throttle_queue` | 漏桶 + 排队等待 | 不想直接拒,在 `max_wait_ms` 内排队 |
-| `fixed_window` | 自然时间窗口对齐计数 | 简单按"每分钟 N 次"计 |
-| `sliding_window` | 时间戳日志,最精确 | 占内存,但最准 |
+| 能力 | 可以做什么 |
+|---|---|
+| `#[rate_limit]` | 给 HTTP handler 增加声明式限流,支持 IP、用户、Header 和全局维度 |
+| `RateLimitEngine` | 使用内存或 Redis 维护限流状态,支持多种算法和故障策略 |
+| `rate_limit_headers_middleware` | 自动输出 `RateLimit-*` 和 `Retry-After` 响应头 |
+| `#[log]` | 记录管理操作的请求、响应、耗时、状态和错误 |
+| `LogBatchCollectorPlugin` | 将操作日志和登录日志批量写入数据库,降低主请求开销 |
 
-> 推荐先用默认 `token_bucket`,有突发场景再换 `gcra` 显式调 burst。
+## 声明式限流
 
-## 基本用法
+`#[rate_limit]` 用在 HTTP handler 上。它会在业务逻辑执行前完成限流检查,命中时直接返回 `429 Too Many Requests`;Redis 后端不可用且策略为 `fail_closed` 时返回 `503 Service Unavailable`。
 
-`crates/summer-admin-macros/src/lib.rs`:
+最常见的是按 IP 或用户限流:
 
 ```rust
 use summer_admin_macros::rate_limit;
 use summer_common::error::ApiResult;
 use summer_web::get_api;
 
-// 单 IP 每秒 2 次
 #[rate_limit(rate = 2, per = "second", key = "ip")]
 #[get_api("/limited")]
 async fn limited_handler() -> ApiResult<()> {
     Ok(())
 }
-
-// GCRA + burst:突发允许 10 个,长期速率每秒 1 个
-#[rate_limit(rate = 1, per = "second", burst = 10, algorithm = "gcra", key = "ip")]
-#[get_api("/api")]
-async fn api_handler() -> ApiResult<()> {
-    Ok(())
-}
-
-// 排队限流:最多排 1.5 秒
-#[rate_limit(
-    rate = 5, per = "second", key = "user",
-    algorithm = "throttle_queue", max_wait_ms = 1500
-)]
-#[get_api("/queue")]
-async fn queue_handler() -> ApiResult<()> {
-    Ok(())
-}
 ```
 
-## 参数全集
+使用时注意:
+
+- 只能用于 async free function。
+- 不支持带 `self` 的方法。
+- 必须放在路由宏外层,例如 `#[rate_limit]` 写在 `#[get_api]` 上方。
+
+## 接入前置条件
+
+限流宏依赖 `summer_common::rate_limit::RateLimitEngine`。业务接口启用限流前,需要先在应用里提供这个组件。
+
+可以通过插件注册:
+
+```rust
+use summer_system::plugins::rate_limit::RateLimitPlugin;
+
+app.add_plugin(RedisPlugin)
+   .add_plugin(RateLimitPlugin);
+```
+
+`RateLimitPlugin` 会从 app 组件里取 `summer_redis::Redis`,然后注册:
+
+```rust
+let engine = summer_common::rate_limit::RateLimitEngine::new(redis);
+app.add_component(engine);
+```
+
+也可以在自定义 router 或测试场景里,直接把 `RateLimitEngine` 作为 axum extension 或 summer 组件注入。
+
+如果还想自动写响应头,需要给 router 挂:
+
+```rust
+use summer_common::rate_limit::middleware::rate_limit_headers_middleware;
+use summer_web::axum::middleware;
+
+router.layer(middleware::from_fn(rate_limit_headers_middleware));
+```
+
+## 参数
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `rate` | **必填** | 每个窗口允许的请求数 |
-| `per` | **必填** | `"second"` / `"minute"` / `"hour"` / `"day"` |
-| `key` | `"global"` | `"global"` / `"ip"` / `"user"` / `"header:<name>"` |
-| `backend` | `"memory"` | `"memory"` / `"redis"` |
-| `algorithm` | `"token_bucket"` | 见算法清单 |
-| `failure_policy` | `"fail_open"` | `"fail_open"` / `"fail_closed"` / `"fallback_memory"` |
-| `burst` | `= rate` | 仅 `token_bucket` / `gcra` |
-| `max_wait_ms` | — | 仅 `throttle_queue`,必须 > 0 |
-| `message` | `"请求过于频繁"` | 被限流时返回的提示 |
+| `rate` | 必填 | 每个窗口允许的请求数,必须大于 0 |
+| `per` | 必填 | `"second"`、`"minute"`、`"hour"`、`"day"` |
+| `key` | `"global"` | `"global"`、`"ip"`、`"user"`、`"header:<name>"` |
+| `backend` | `"memory"` | `"memory"` 或 `"redis"` |
+| `algorithm` | `"token_bucket"` | 见下方算法表 |
+| `failure_policy` | `"fail_open"` | Redis 故障时的策略 |
+| `burst` | `rate` | 仅 `token_bucket` / `gcra` 支持 |
+| `max_wait_ms` | 无 | 仅 `throttle_queue` 支持且必须大于 0 |
+| `message` | `"请求过于频繁"` | 429 响应提示 |
+| `mode` | `"enforce"` | `"enforce"` 或 `"shadow"` |
 
-## key 的语义
+`key = "user"` 会优先使用登录用户 ID;未登录时回退到 `ip:<client_ip>`,不会和 `key = "ip"` 串桶。`key = "header:X-Tenant-Id"` 会按 Header 值分桶,Header 缺失时使用 `unknown`。
 
-| key | 实际维度 |
-|---|---|
-| `"global"` | 所有请求共享同一个桶 |
-| `"ip"` | 按客户端 IP(`ip:1.2.3.4`) |
-| `"user"` | 按登录用户 id;**未登录回退到 `ip:` 前缀**,不会与 `"ip"` 串号 |
-| `"header:X-Tenant-Id"` | 按某个 header 值;header 缺失时用 `unknown` |
+## 算法
 
-## failure_policy
+| `algorithm` | 内核 | 说明 |
+|---|---|---|
+| `token_bucket` | GCRA | 默认选项,burst 默认等于 rate |
+| `gcra` | GCRA | 显式 GCRA,适合精确控制突发 |
+| `leaky_bucket` | ScheduledSlot | 严格按 1/rate 间隔放行 |
+| `throttle_queue` | ScheduledSlot | 在 `max_wait_ms` 内等待,超过才拒绝 |
+| `fixed_window` | 计数器 | 按自然窗口边界计数 |
+| `sliding_window` | 时间戳日志 | 更精确,内存开销更高 |
 
-`backend = "redis"` 时,Redis 故障的兜底策略:
+只有 `token_bucket` 和 `gcra` 支持 cost-based 限流和 reservation。
+
+## Redis 故障策略
+
+`backend = "redis"` 时,Redis 故障由 `failure_policy` 决定:
 
 | 策略 | 行为 |
 |---|---|
-| `"fail_open"` | 放行,记录 stats(默认) |
-| `"fail_closed"` | 返回 503 |
-| `"fallback_memory"` | 跌到本地内存桶,**多实例下语义降级**(每实例独立计数) |
+| `fail_open` | 放行,记录统计 |
+| `fail_closed` | 返回 503 |
+| `fallback_memory` | 使用本进程内存桶兜底 |
 
-生产场景的取舍:
+多实例部署时,`fallback_memory` 只在单个进程内计数,语义会降级。对外部 API 更看重可用性时通常选 `fail_open`;对配额严格性要求更高时选 `fail_closed`。
 
-- **更看重可用性** → `fail_open`(挂了 Redis 也别让用户感知)
-- **更看重准确性** → `fail_closed`(宁可 503 也不放过去)
-- **能接受单进程隔离** → `fallback_memory`
+## Shadow 模式
 
-## 前置条件
-
-`#[rate_limit]` 需要在应用里有一个 `RateLimitEngine` 组件:
+`mode = "shadow"` 表示只记录“本来会拒绝”,但不真的拒绝请求:
 
 ```rust
-// 方式 1:axum layer
-router.layer(Extension(RateLimitEngine::new(...)));
-
-// 方式 2:summer 组件
-app.add_component(RateLimitEngine::new(...));
+#[rate_limit(rate = 10, per = "minute", key = "user", mode = "shadow")]
+#[get_api("/expensive")]
+async fn expensive() -> ApiResult<()> {
+    Ok(())
+}
 ```
 
-通常框架已经在 `summer-common` 或对应插件里准备好了,业务侧不用关心。
+Shadow 和 Enforce 共享同一个桶状态。长期跑 shadow 后直接切到 enforce,可能立刻拒绝一段时间。切换前可以调用 `RateLimitEngine::reset_key` 清桶。
 
-## 内核细节:GCRA 是怎么工作的
+## Cost 与预扣
 
-```text
-TAT(Theoretical Arrival Time)= 上次请求到达时间 + 1/rate
+`RateLimitContext` 还支持按 cost 消耗配额:
 
-来一个请求时:
-  if now >= TAT - burst*1/rate:
-    放行,TAT = max(now, TAT) + 1/rate
-  else:
-    拒绝(或排队等待)
+```rust
+let key = rate_limit_ctx.extract_key(RateLimitKeyType::User);
+
+let _meta = rate_limit_ctx
+    .check_with_cost(&key, config.clone(), 20, "请求过于频繁")
+    .await?;
 ```
 
-只用 1 个时间戳就能表达"长期速率 + 突发容量",**O(1) 内存**,Cloudflare 用它扛过亿 QPS。
+如果业务需要“先预扣,结束后按真实消耗找平”,使用 `reserve`:
 
-## 限流命中后的响应
+```rust
+let reservation = rate_limit_ctx
+    .reserve(&key, config.clone(), estimated_cost, "请求过于频繁")
+    .await?;
+
+// 成功后 commit,失败或估算过高时 release/refund。
+```
+
+这类能力适合 AI token、批量导入、文件处理等消耗型任务。非 GCRA 算法收到 `cost > 1` 时只按 1 次请求计数,并首次打 warn。
+
+## 响应头
+
+如果挂了 `rate_limit_headers_middleware`,响应会自动带 IETF draft 风格的限流头:
+
+| Header | 含义 |
+|---|---|
+| `RateLimit-Limit` | 桶或窗口容量 |
+| `RateLimit-Remaining` | 剩余可立即使用配额 |
+| `RateLimit-Reset` | 恢复所需秒数 |
+| `Retry-After` | 仅限流拒绝时返回 |
+
+被限流时,业务响应使用统一错误格式:
 
 ```http
 HTTP/1.1 429 Too Many Requests
-Content-Type: application/json
 Retry-After: 1
+Content-Type: application/json
 
 {
   "code": 429,
@@ -135,95 +177,89 @@ Retry-After: 1
 }
 ```
 
-`Retry-After` 是建议等待秒数(GCRA 能精确算)。
+## 操作日志宏
 
-## 复合用法
+系统接口可以使用 `#[log]` 记录操作审计:
 
 ```rust
-// 同时挂登录校验、权限校验、限流、日志
-#[has_perm("ai:relay:chat")]
-#[rate_limit(rate = 60, per = "minute", key = "user", backend = "redis")]
-#[log(module = "AI 网关", action = "chat completion", biz_type = Other, save_response = false)]
-#[post_api("/v1/chat/completions")]
-async fn chat_completions(...) -> ApiResult<...> { ... }
+#[log(module = "用户管理", action = "创建用户", biz_type = Create)]
+#[has_perm("system:user:create")]
+#[post_api("/user")]
+pub async fn create_user(...) -> ApiResult<()> {
+    // ...
+}
 ```
 
-宏的展开顺序是从下往上,所以先校验权限,再走限流,最后记日志。日志记录的是真实命中后的耗时(限流拒掉的请求也会被日志感知,看 `status_code`)。
-
-## 操作日志 `#[log]`
-
-`#[log]` 把每次请求记录成一条 `sys.operation_log`,字段:
+宏展开后会注入 `OperationLogContext`,记录:
 
 | 字段 | 来源 |
 |---|---|
-| `module` | 宏参数 |
-| `action` | 宏参数 |
-| `biz_type` | 宏参数(`Create` / `Update` / `Delete` / `Query` / `Auth` / ...) |
-| `request_method` | HTTP 方法 |
-| `request_path` | 路由 path |
-| `request_params` | 请求 body / query(可关闭) |
-| `response_body` | 响应内容(可关闭,大响应建议关) |
-| `oper_user_id` / `oper_user_name` | 当前登录用户 |
-| `oper_ip` / `oper_location` | IP + IP2Region 地理位置 |
-| `oper_ua` | User-Agent |
-| `cost_ms` | 耗时 |
-| `status` | 成功 / 失败 |
-| `error_message` | 失败信息(如有) |
+| `module` / `action` / `business_type` | 宏参数 |
+| `request_method` / `request_url` | HTTP 请求 |
+| `request_params` | query 和 JSON body,可关闭 |
+| `response_body` | 响应体,可关闭 |
+| `response_code` | handler 返回或错误映射 |
+| `client_ip` / `user_agent` | 请求上下文 |
+| `user_id` / `user_name` | 登录会话 `UserSession` |
+| `duration` | handler 耗时 |
+| `status` / `error_msg` | 成功、失败或 panic |
 
-## 批量写入:为什么不直接写库
+敏感接口要关闭参数记录:
 
-`#[log]` 不会同步写 `sys.operation_log`(那样会拖慢主请求 5-30ms)。它把记录扔进一个 channel,`LogBatchCollectorPlugin` 在后台:
+```rust
+#[log(module = "认证管理", action = "管理员登录", biz_type = Auth, save_params = false)]
+```
+
+大响应或文件响应要关闭响应体记录:
+
+```rust
+#[log(module = "文件管理", action = "公开分享下载", biz_type = Query, save_response = false)]
+```
+
+## 日志批量写入
+
+主应用已注册:
+
+```rust
+app.add_plugin(LogBatchCollectorPlugin)
+```
+
+`LogBatchCollectorPlugin` 提供 `OperationLogCollector` 和 `LoginLogCollector`。service 不同步写库,而是先 `try_send` 到有界 channel,后台 worker 满足条件后批量 `insert_many`。
+
+默认配置来自 `summer-plugins/src/log_batch_collector/config.rs`:
 
 ```toml
 [log-batch]
-batch_size = 100      # 攒够 100 条或定时 flush
+batch_size = 50
+flush_interval_ms = 500
+capacity = 4096
 ```
 
-这样:
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `batch_size` | `50` | 累积多少条后批量 INSERT |
+| `flush_interval_ms` | `500` | 不足 batch size 时的强制刷新间隔 |
+| `capacity` | `4096` | channel 容量 |
 
-- **主链路无阻塞** —— 写日志只走 channel.send (微秒级)
-- **数据库压力可控** —— 每秒最多几次批量 INSERT,而不是几千次单条
-- **失败兜底** —— channel 满了会降级到同步写或丢弃(看策略)
+通道满或关闭时,日志会被丢弃并记录 warn,不会阻塞主请求。
 
-## 操作日志的查询
+## 查询日志
 
-```bash
-# 后台 API
-GET /api/operation-log?module=AI 网关&page=1&size=20
-GET /api/login-log?username=Admin
+系统路由提供日志查询:
 
-# 数据库直接查
-SELECT module, action, oper_user_name, cost_ms, status, oper_time
-FROM sys.operation_log
-WHERE oper_time > now() - interval '1 day'
-ORDER BY oper_time DESC
-LIMIT 100;
-```
+| 方法 | 路径 | 权限 |
+|---|---|---|
+| `GET` | `/api/operation-log/list` | `system:operation-log:list` |
+| `GET` | `/api/operation-log/{id}` | `system:operation-log:detail` |
+| `GET` | `/api/login-log/list` | `system:login-log:list` |
 
-## 限流后端选择决策
+日志查询本身也挂了 `#[log]`,所以管理员查看日志的动作也会进入操作日志。
 
-```mermaid
-flowchart TD
-    A[要不要跨实例?] -->|否| B[单进程<br/>memory 后端]
-    A -->|是| C[Redis 在线?]
-    C -->|是,要严格| D[redis backend<br/>fail_closed]
-    C -->|是,要可用| E[redis backend<br/>fail_open]
-    C -->|是,可降级| F[redis backend<br/>fallback_memory]
-```
+## 实践建议
 
-## 性能开销
-
-| 后端 | 单次检查 |
-|---|---|
-| `memory`(moka 缓存 + GCRA) | < 1μs |
-| `redis`(单 Lua 脚本) | 0.5ms - 2ms(看网络) |
-
-`memory` 桶用 `moka::sync::Cache` 自动 GC,无内存膨胀。
-
-## 参考源码
-
-- 宏定义:`crates/summer-admin-macros/src/lib.rs`(第 146 行起)
-- 宏展开:`crates/summer-admin-macros/src/rate_limit_macro.rs`
-- `RateLimitEngine`:`crates/summer-common/src/rate_limit/`(具体路径以仓库实际为准)
-- 日志宏:`crates/summer-admin-macros/src/log_macro.rs`
-- 批量日志收集:`crates/summer-plugins/src/log_batch_collector/`
+- 普通后台 CRUD 优先只用 `#[log]` 和权限宏。
+- 登录、密码、token、文件下载等敏感/大体积接口要关闭参数或响应体记录。
+- 限流上线前先注册 `RateLimitEngine`,再从少量接口开始。
+- 外部 API 或高成本接口优先使用 Redis 后端。
+- 从 `shadow` 模式观察一段时间再切 `enforce`,切换前注意清桶。
+- 如果需要客户端自动退避,别忘了挂 `rate_limit_headers_middleware`。

@@ -1,19 +1,19 @@
 ---
 pageType: home
-description: Summerrs Admin — Full-stack Rust admin system with LLM gateway, sharding, multi-tenancy, MCP, and declarative macros built in.
+description: Summerrs Admin - Rust admin system with MCP service, declarative macros, auth, logging, and backend management foundations.
 link-rss: updates
 
 hero:
   name: Summerrs Admin
-  text: Full-stack Rust Admin Platform
-  tagline: LLM gateway, multi-tenant sharding, MCP tools, and declarative audit — all in one Rust binary
+  text: Rust Admin System
+  tagline:
   actions:
     - theme: brand
       text: Get Started in 5 min
       link: /en/guide/start/overview
     - theme: alt
       text: Architecture
-      link: /en/guide/architecture/overview
+      link: /en/guide/architecture/directory
     - theme: alt
       text: GitHub
       link: https://github.com/ouywm/summerrs-admin

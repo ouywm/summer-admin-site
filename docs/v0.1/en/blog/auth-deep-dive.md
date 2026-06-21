@@ -647,7 +647,7 @@ My design **was pushed by the business**, not architected upfront. Each layer wa
 To be honest, v5 isn't the end either.
 
 - **The 1-2 hour window after refresh-token theft** — refresh-time checks block malicious refreshes, but one successful malicious refresh continues the session. Device fingerprinting / IP-binding helps, at the cost of false positives.
-- **Bulk permission changes** — changing roles for 10,000 users — do you write 10,000 deny entries? A "global deny timestamp" version exists, but that triggers everyone's refresh at once — DB pressure?
+- **Propagation granularity for role changes** — the common case is changing the menus or buttons bound to a role, then deciding how quickly already-logged-in users with that role should observe it. `auth:deny:{login_id}` is good for refreshing one user precisely; role-wide propagation is better modeled with a `role_version` / `permission_version` carried in the access token and checked only where the product needs that freshness. For ordinary admin backends, short access-token expiry may be enough.
 - **Multi-tenant isolation** — current deny key is `auth:deny:{login_id}`; tenant context isn't part of it. Deep-isolation tenants might want per-tenant deny.
 - **Passkey / WebAuthn** — schema is there (`sys.passkey_credential`), flow isn't.
 
@@ -671,7 +671,7 @@ Hope this helps anyone going through similar wandering. Feel free to [open an is
 ## Further reading
 
 - Tutorial: [Auth & Authorization](/en/guide/core/auth)
-- Architecture: [Architecture Overview](/en/guide/architecture/overview)
+- Architecture: [Project Structure](/en/guide/architecture/directory)
 - Source: `crates/summer-auth/src/lib.rs`
 - Key files:
   - `crates/summer-auth/src/middleware.rs` — middleware layer
